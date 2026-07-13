@@ -79,3 +79,4 @@ QR generator and print it for the event.
 
 See `.env.example` — every setting is env-driven (secret key, hosts, database, storage
 backend, email). The `USE_S3` flag alone switches photo storage between local disk and S3.
+
