@@ -5,7 +5,13 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/srv/quicksnap}"
-COMPOSE="docker compose -f docker-compose.prod.yml"
+
+# Support both Compose v2 (`docker compose`) and v1 (`docker-compose`).
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE="docker compose -f docker-compose.prod.yml"
+else
+    COMPOSE="docker-compose -f docker-compose.prod.yml"
+fi
 
 cd "$APP_DIR"
 
