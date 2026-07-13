@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>{{ event.name }} — Viewfinder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --film-black:#17110D; --safelight:#F0A63A; --shutter:#D63B24;
+      --ivory:#F3EAD9; --muted:#A08A72; --sprocket:#0E0A07;
+    }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100dvh; background:#000; overflow:hidden;
+      font-family:"Space Mono",monospace; }
+    #video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+    #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
+    #flash.fire { animation:flash .18s ease-out; }
+    @keyframes flash { 0%{opacity:.92} 100%{opacity:0} }
+
+    /* film-frame corner brackets — you're shooting *inside* a frame */
+    .brackets { position:fixed; inset:0; pointer-events:none; }
+    .brackets::before, .brackets::after,
+    .brackets > i::before, .brackets > i::after {
+      content:""; position:absolute; width:26px; height:26px;
+      border:2px solid rgba(243,234,217,.55);
+    }
+    .brackets::before { top:calc(env(safe-area-inset-top) + 76px); left:20px; border-right:0; border-bottom:0; }
+    .brackets::after  { top:calc(env(safe-area-inset-top) + 76px); right:20px; border-left:0; border-bottom:0; }
+    .brackets > i::before { bottom:150px; left:20px; border-right:0; border-top:0; }
+    .brackets > i::after  { bottom:150px; right:20px; border-left:0; border-top:0; }
+
+    /* --- Exposure counter window: the signature. A lit mechanical readout. --- */
+    #counter {
+      position:fixed; top:calc(env(safe-area-inset-top) + 16px); left:50%; transform:translateX(-50%);
+      display:flex; align-items:baseline; gap:8px;
+      background:rgba(14,10,7,.72); border:1px solid rgba(240,166,58,.45);
+      border-radius:3px; padding:8px 16px; backdrop-filter:blur(8px);
+      box-shadow:0 0 18px rgba(240,166,58,.18);
+    }
+    #counter .num { font-size:1.55rem; font-weight:700; color:var(--safelight);
+      font-variant-numeric:tabular-nums; line-height:1; text-shadow:0 0 10px rgba(240,166,58,.5); }
+    #counter .lab { font-size:.62rem; letter-spacing:.24em; color:var(--muted); text-transform:uppercase; }
+
+    #endcd {
+      position:fixed; top:calc(env(safe-area-inset-top) + 62px); left:50%; transform:translateX(-50%);
+      font-size:.68rem; letter-spacing:.16em; color:rgba(243,234,217,.82); text-transform:uppercase;
+      text-shadow:0 1px 3px rgba(0,0,0,.8); font-variant-numeric:tabular-nums;
+    }
+    #endcd:empty { display:none; }
+
+    #switch {
+      position:fixed; top:calc(env(safe-area-inset-top) + 14px); right:16px;
+      background:rgba(14,10,7,.72); color:var(--ivory); border:1px solid rgba(243,234,217,.18);
+      border-radius:3px; padding:8px 12px; font-family:inherit; font-size:.62rem;
+      letter-spacing:.18em; text-transform:uppercase;
+    }
+
+    .controls {
+      position:fixed; left:0; right:0; bottom:0; display:flex; flex-direction:column;
+      align-items:center; gap:14px; padding-bottom:calc(env(safe-area-inset-bottom) + 34px);
+    }
+    /* mechanical shutter release — the one red thing in the whole app */
+    #snap {
+      width:78px; height:78px; border-radius:50%; border:3px solid rgba(243,234,217,.85);
+      background:var(--shutter); cursor:pointer; padding:0;
+      box-shadow:0 0 0 6px rgba(0,0,0,.35), inset 0 -3px 8px rgba(0,0,0,.4);
+      transition:transform .07s;
+    }
+    #snap:active { transform:scale(.9); }
+    #snap:disabled { background:#5a4b40; border-color:rgba(243,234,217,.35); }
+    #hint { color:rgba(243,234,217,.72); font-size:.64rem; letter-spacing:.22em;
+      text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+
+    /* gate + overlay share the darkroom look */
+    #gate, #overlay {
+      position:fixed; inset:0; display:none; flex-direction:column; align-items:center;
+      justify-content:center; gap:12px; padding:32px; text-align:center;
+      background:radial-gradient(120% 90% at 50% 0%, rgba(240,166,58,.08), transparent 55%), rgba(23,17,13,.94);
+      backdrop-filter:blur(10px); color:var(--ivory);
+    }
+    #gate.show, #overlay.show { display:flex; }
+    #gate-msg, #overlay-msg { font-family:"Fraunces",serif; font-weight:500; font-size:1.35rem; }
+    #gate-cd { font-size:2.4rem; font-weight:700; color:var(--safelight);
+      font-variant-numeric:tabular-nums; text-shadow:0 0 16px rgba(240,166,58,.4); }
+    #overlay-retry { margin-top:12px; padding:13px 26px; border:0; border-radius:3px;
+      background:var(--safelight); color:#1A120A; font-family:"Space Mono",monospace;
+      font-weight:700; letter-spacing:.16em; text-transform:uppercase; font-size:.82rem; }
+    @media (prefers-reduced-motion:reduce) { #snap, #flash { transition:none; animation:none; } }
+  </style>
+</head>
+<body
+  data-capture-url="{% url 'snap:capture' event.slug %}"
+  data-done-url="{% url 'snap:done' event.slug %}"
+  data-remaining="{{ remaining }}"
+  data-start="{{ event.start_at|date:'c' }}"
+  data-end="{{ event.end_at|date:'c' }}"
+  data-lang="{{ lang }}"
+  data-t-closes="{{ t.cd_closes }}"
+  data-t-gate="{{ t.gate_opens }}"
+  data-t-camerr="{{ t.cam_err }}"
+  data-t-uperr="{{ t.upload_err }}">
+
+  <video id="video" playsinline autoplay muted></video>
+  <div id="flash"></div>
+  <div class="brackets"><i></i></div>
+
+  <button id="switch" type="button">{{ t.flip }}</button>
+  <div id="counter"><span class="num">0</span><span class="lab">{{ t.exp_left }}</span></div>
+  <div id="endcd"></div>
+
+  <div class="controls">
+    <button id="snap" type="button" aria-label="Take photo"></button>
+    <div id="hint">{{ t.tap_expose }}</div>
+  </div>
+
+  <div id="gate">
+    <div id="gate-msg">{{ t.gate_opens }}</div>
+    <div id="gate-cd"></div>
+  </div>
+
+  <div id="overlay">
+    <div id="overlay-msg">{{ t.cam_err }}</div>
+    <button id="overlay-retry" type="button">{{ t.retry }}</button>
+  </div>
+
+  <canvas id="canvas" hidden></canvas>
+
+  {% csrf_token %}
+  <script>
+  (function () {
+    const body = document.body;
+    const CAPTURE_URL = body.dataset.captureUrl;
+    const DONE_URL = body.dataset.doneUrl;
+    let remaining = parseInt(body.dataset.remaining, 10);
+    const startAt = body.dataset.start ? new Date(body.dataset.start) : null;
+    const endAt = body.dataset.end ? new Date(body.dataset.end) : null;
+    const fa = body.dataset.lang === "fa";
+    const T = {
+      closes: body.dataset.tCloses, gate: body.dataset.tGate,
+      camErr: body.dataset.tCamerr, upErr: body.dataset.tUperr,
+    };
+    const faDigit = s => fa ? s.replace(/[0-9]/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]) : s;
+    let facing = "environment";
+    let stream = null;
+    let busy = false;
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const snap = document.getElementById("snap");
+    const flash = document.getElementById("flash");
+    const counterNum = document.querySelector("#counter .num");
+    const endcd = document.getElementById("endcd");
+    const gate = document.getElementById("gate");
+    const gateCd = document.getElementById("gate-cd");
+    const overlay = document.getElementById("overlay");
+    const overlayMsg = document.getElementById("overlay-msg");
+    const csrf = document.querySelector("input[name=csrfmiddlewaretoken]").value;
+
+    function fmt(ms) {
+      let s = Math.max(0, Math.floor(ms / 1000));
+      const d = Math.floor(s / 86400); s -= d * 86400;
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60); s -= m * 60;
+      const p = n => String(n).padStart(2, "0");
+      return faDigit((d > 0 ? d + "d " : "") + p(h) + ":" + p(m) + ":" + p(s));
+    }
+
+    function started() { return !startAt || new Date() >= startAt; }
+    function ended() { return endAt && new Date() > endAt; }
+
+    function renderCounter() {
+      counterNum.textContent = faDigit(String(remaining).padStart(2, "0"));
+    }
+
+    function tickClocks() {
+      const now = new Date();
+      if (startAt && now < startAt) {
+        gate.classList.add("show");
+        document.getElementById("gate-msg").textContent = T.gate;
+        gateCd.textContent = fmt(startAt - now);
+        snap.disabled = true;
+      } else {
+        gate.classList.remove("show");
+        if (!busy && !ended()) snap.disabled = false;
+      }
+      if (endAt) {
+        if (ended()) { window.location = DONE_URL; return; }
+        endcd.textContent = T.closes + " " + fmt(endAt - now);
+      }
+    }
+
+    function showOverlay(msg, showRetry) {
+      overlayMsg.textContent = msg;
+      document.getElementById("overlay-retry").style.display = showRetry ? "" : "none";
+      overlay.classList.add("show");
+    }
+
+    async function startCamera() {
+      overlay.classList.remove("show");
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing }, audio: false
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        showOverlay(T.camErr, true);
+      }
+    }
+
+    async function takePhoto() {
+      if (busy || remaining <= 0 || !stream) return;
+      if (!started() || ended()) return;
+      busy = true; snap.disabled = true;
+
+      const w = video.videoWidth, h = video.videoHeight;
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (facing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(video, 0, 0, w, h);
+
+      flash.classList.remove("fire"); void flash.offsetWidth; flash.classList.add("fire");
+
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.9));
+      const fd = new FormData();
+      fd.append("image", blob, "snap.jpg");
+
+      try {
+        const res = await fetch(CAPTURE_URL, {
+          method: "POST", body: fd, headers: { "X-CSRFToken": csrf }
+        });
+        if (res.status === 409) { window.location = DONE_URL; return; }
+        if (res.status === 403) {
+          const d = await res.json().catch(() => ({}));
+          if (d.error === "ended" || d.error === "closed") { window.location = DONE_URL; return; }
+          tickClocks();
+          return;
+        }
+        if (!res.ok) throw new Error("upload failed");
+        const data = await res.json();
+        remaining = data.remaining;
+        renderCounter();
+        if (data.done) { window.location = DONE_URL; return; }
+      } catch (e) {
+        showOverlay(T.upErr, true);
+      } finally {
+        busy = false; snap.disabled = false;
+      }
+    }
+
+    snap.addEventListener("click", takePhoto);
+    document.getElementById("switch").addEventListener("click", () => {
+      facing = facing === "environment" ? "user" : "environment";
+      video.style.transform = facing === "user" ? "scaleX(-1)" : "none";
+      startCamera();
+    });
+    document.getElementById("overlay-retry").addEventListener("click", startCamera);
+
+    renderCounter();
+    tickClocks();
+    if (startAt || endAt) setInterval(tickClocks, 1000);
+    startCamera();
+  })();
+  </script>
+</body>
+</html>

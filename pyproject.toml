@@ -1,0 +1,61 @@
+[project]
+name = "quicksnap"
+version = "0.1.0"
+description = "QR-driven disposable-camera webapp for events (weddings)."
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.0,<6.0",
+    "pillow>=10.0",
+    "django-storages[s3]>=1.14",
+    "boto3>=1.34",
+    "django-environ>=0.11",
+    "gunicorn>=22.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "black>=24.0",
+    "isort>=5.13",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = [".venv", "**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]  # errors, pyflakes, isort, pyupgrade, bugbear, django
+ignore = ["E501"]  # line length handled by black
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \.cursor
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+skip = [".cursor", ".venv"]
+multi_line_output = 3
+line_length = 88
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true

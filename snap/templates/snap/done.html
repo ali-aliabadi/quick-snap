@@ -1,0 +1,27 @@
+{% extends "snap/base.html" %}
+{% block title %}Roll complete — {{ event.name }}{% endblock %}
+{% block body %}
+<div class="film-edge"></div>
+<div class="stage" style="text-align:center;">
+  <div class="eyebrow" style="text-align:center;">End of roll</div>
+  <h1>Roll finished</h1>
+  {% if guest %}
+    <p class="muted">
+      You exposed <b style="color:var(--ivory);">{{ guest.taken }}</b>
+      frame{{ guest.taken|pluralize }} at {{ event.name }}.
+    </p>
+    <div class="spec" style="justify-content:center;">
+      {% if guest.email %}
+        <span>Developing &amp; sending to</span>
+        <span class="dot">→</span>
+        <span><b>{{ guest.email }}</b></span>
+      {% else %}
+        <span>Thanks for shooting</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="muted">Thanks for shooting at {{ event.name }}.</p>
+  {% endif %}
+</div>
+<div class="film-edge"></div>
+{% endblock %}

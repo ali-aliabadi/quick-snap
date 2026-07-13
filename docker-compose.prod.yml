@@ -1,0 +1,44 @@
+# Production stack: Django (gunicorn) behind Caddy for automatic HTTPS.
+# Camera capture requires HTTPS — Caddy provides it. Set your domain in deploy/Caddyfile
+# and point DNS at the host first. Secrets come from .env (see .env.example).
+
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Persist SQLite on the db_data volume (4 slashes = absolute path).
+      - DATABASE_URL=sqlite:////app/data/db.sqlite3
+    expose:
+      - "8000"
+    volumes:
+      # Persist SQLite + local media. Omit media if USE_S3=True.
+      - db_data:/app/data
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      - SNAP_DOMAIN=${SNAP_DOMAIN:-snap.yourdomain.com}
+      - SNAP_UPSTREAM=web:8000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static_data:/srv/quicksnap/staticfiles:ro
+      - media_data:/srv/quicksnap/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  db_data:
+  media_data:
+  static_data:
+  caddy_data:
+  caddy_config:

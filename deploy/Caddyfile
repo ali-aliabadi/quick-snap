@@ -1,0 +1,26 @@
+# Reverse proxy with automatic HTTPS for Quick Snap.
+# Camera capture (getUserMedia) requires a secure context — this provides it.
+#
+# Domain and upstream come from env so the same file works for Docker and bare-metal:
+#   Docker (docker-compose.prod.yml): SNAP_DOMAIN=snap.yourdomain.com, SNAP_UPSTREAM=web:8000
+#   Bare gunicorn on the host:        SNAP_DOMAIN=snap.yourdomain.com, SNAP_UPSTREAM=localhost:8000
+# Defaults below assume the Docker stack. Point DNS at the host first.
+
+{$SNAP_DOMAIN:snap.yourdomain.com} {
+    encode gzip
+
+    # Django static files (after `collectstatic`)
+    handle_path /static/* {
+        root * /srv/quicksnap/staticfiles
+        file_server
+    }
+
+    # Local media (local-storage only — omit if using S3)
+    handle_path /media/* {
+        root * /srv/quicksnap/media
+        file_server
+    }
+
+    # App
+    reverse_proxy {$SNAP_UPSTREAM:web:8000}
+}

@@ -1,0 +1,16 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/media/
+
+# Secrets
+.env
+
+# OS
+.DS_Store
