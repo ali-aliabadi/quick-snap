@@ -1,0 +1,170 @@
+{% extends "snap/base.html" %}
+{% block title %}{{ t.site_name }} — {{ t.lp_eyebrow }}{% endblock %}
+
+{% block head %}
+<style>
+  /* Landing overrides the base's centered single-column flow. */
+  body.lp { display:block; justify-content:flex-start; }
+  body.lp .film-edge { max-width:100%; }
+  .lp-wrap { width:100%; max-width:920px; margin:0 auto; padding:0 22px; }
+
+  /* --- Hero --- */
+  .lp-hero { padding:64px 0 20px; }
+  .lp-hero .eyebrow { margin-top:0; }
+  .lp-title {
+    font-family:var(--font-display); font-weight:500; letter-spacing:-.02em;
+    font-size:clamp(2.8rem, 9vw, 5.2rem); line-height:.98; margin:6px 0 0;
+  }
+  .lp-sub {
+    color:var(--muted); font-size:clamp(1rem,2.4vw,1.18rem); line-height:1.65;
+    max-width:34ch; margin:20px 0 0;
+  }
+  .lp-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:30px; }
+  .lp-btn {
+    width:auto; margin:0; display:inline-block; text-decoration:none;
+    padding:14px 26px; border-radius:3px;
+    font-family:var(--font-mono); font-size:.82rem; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase;
+  }
+  .lp-btn-primary { background:var(--safelight); color:#1A120A; }
+  .lp-btn-ghost {
+    background:transparent; color:var(--ivory); border:1px solid var(--panel-edge);
+  }
+  .lp-btn-ghost:hover { border-color:var(--safelight); color:var(--safelight); }
+
+  /* --- Signature: the filmstrip --- */
+  .filmstrip {
+    margin:52px 0 8px; border-radius:6px; overflow:hidden;
+    background:var(--sprocket);
+    border-block:14px solid transparent;
+    /* sprocket-hole rails top & bottom via border-box gradients */
+    background-image:
+      radial-gradient(circle at 14px 7px, var(--film-black) 0 3.2px, transparent 4px),
+      radial-gradient(circle at 14px calc(100% - 7px), var(--film-black) 0 3.2px, transparent 4px);
+    background-size:28px 14px, 28px 14px;
+    background-position:top left, bottom left;
+    background-repeat:repeat-x, repeat-x;
+  }
+  .frames { display:flex; gap:6px; padding:10px 6px; overflow-x:auto; scrollbar-width:none; }
+  .frames::-webkit-scrollbar { display:none; }
+  .frame {
+    flex:0 0 auto; width:132px; height:104px; border-radius:3px;
+    background:var(--panel); border:1px solid var(--panel-edge);
+    position:relative; display:flex; align-items:flex-end; padding:9px;
+    background-image:radial-gradient(120% 90% at 50% 0%, var(--safelight-dim), transparent 62%);
+  }
+  .frame .exp {
+    font-family:var(--font-mono); font-size:.62rem; letter-spacing:.14em;
+    color:var(--safelight); text-transform:uppercase; opacity:.9;
+  }
+  .frame.qr { align-items:center; justify-content:center; background:var(--panel); }
+  .frame.qr .qr-grid {
+    width:56px; height:56px;
+    background:
+      conic-gradient(from 90deg at 50% 50%, var(--ivory) 25%, transparent 0) 0 0/14px 14px,
+      linear-gradient(var(--ivory),var(--ivory));
+    -webkit-mask:radial-gradient(circle at 7px 7px, #000 3px, transparent 4px) 0 0/14px 14px;
+            mask:radial-gradient(circle at 7px 7px, #000 3px, transparent 4px) 0 0/14px 14px;
+    opacity:.85; border-radius:2px;
+  }
+
+  /* --- Sections --- */
+  .lp-section { padding:46px 0; border-top:1px solid var(--panel-edge); }
+  .lp-section .eyebrow { margin:0 0 22px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(3,1fr); }
+  .card {
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:4px;
+    padding:22px;
+  }
+  .card .mark {
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.2em;
+    color:var(--safelight); display:block; margin-bottom:14px;
+  }
+  .card h3 {
+    font-family:var(--font-display); font-weight:500; font-size:1.35rem;
+    margin:0 0 8px; letter-spacing:-.01em;
+  }
+  .card p { color:var(--muted); font-size:.92rem; line-height:1.6; margin:0; }
+
+  /* --- Final CTA --- */
+  .lp-final { padding:56px 0 40px; border-top:1px solid var(--panel-edge); text-align:center; }
+  .lp-final h2 {
+    font-family:var(--font-display); font-weight:500; letter-spacing:-.015em;
+    font-size:clamp(1.9rem,5vw,2.8rem); line-height:1.05; margin:0 auto; max-width:18ch;
+  }
+  .lp-final p { color:var(--muted); margin:16px auto 26px; max-width:40ch; line-height:1.6; }
+  .lp-footer {
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.14em;
+    color:var(--muted); text-transform:uppercase; text-align:center;
+    padding:22px 0 40px; opacity:.75;
+  }
+
+  @media (max-width:640px) {
+    .grid { grid-template-columns:1fr; }
+    .lp-hero { padding-top:44px; }
+  }
+</style>
+{% endblock %}
+
+{% block body_class %}lp{% endblock %}
+
+{% block body %}
+<div class="film-edge"></div>
+
+<div class="lp-wrap">
+  <!-- Hero: the thesis -->
+  <header class="lp-hero">
+    <div class="eyebrow">{{ t.lp_eyebrow }}</div>
+    <h1 class="lp-title">{{ t.lp_hero_title|linebreaksbr }}</h1>
+    <p class="lp-sub">{{ t.lp_hero_sub }}</p>
+    <div class="lp-actions">
+      <a class="lp-btn lp-btn-primary" href="#host">{{ t.lp_cta_host }}</a>
+      <a class="lp-btn lp-btn-ghost" href="{% url 'admin:index' %}">{{ t.lp_cta_signin }}</a>
+    </div>
+  </header>
+
+  <!-- Signature: a loaded roll of exposures -->
+  <div class="filmstrip" aria-hidden="true">
+    <div class="frames">
+      <div class="frame"><span class="exp">EXP 01</span></div>
+      <div class="frame"><span class="exp">EXP 02</span></div>
+      <div class="frame"><span class="exp">EXP 03</span></div>
+      <div class="frame"><span class="exp">EXP 04</span></div>
+      <div class="frame"><span class="exp">EXP 05</span></div>
+      <div class="frame qr"><div class="qr-grid"></div></div>
+    </div>
+  </div>
+  <p class="lp-sub" style="max-width:44ch">{{ t.lp_scan_hint }}</p>
+
+  <!-- How it works: a real sequence, so numbers are earned -->
+  <section class="lp-section">
+    <div class="eyebrow">{{ t.lp_how_eyebrow }}</div>
+    <div class="grid">
+      <div class="card"><span class="mark">01</span><h3>{{ t.lp_how_1_t }}</h3><p>{{ t.lp_how_1_d }}</p></div>
+      <div class="card"><span class="mark">02</span><h3>{{ t.lp_how_2_t }}</h3><p>{{ t.lp_how_2_d }}</p></div>
+      <div class="card"><span class="mark">03</span><h3>{{ t.lp_how_3_t }}</h3><p>{{ t.lp_how_3_d }}</p></div>
+    </div>
+  </section>
+
+  <!-- Why: value props, not a sequence — no numbers -->
+  <section class="lp-section">
+    <div class="eyebrow">{{ t.lp_why_eyebrow }}</div>
+    <div class="grid">
+      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_1_t }}</h3><p>{{ t.lp_why_1_d }}</p></div>
+      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_2_t }}</h3><p>{{ t.lp_why_2_d }}</p></div>
+      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_3_t }}</h3><p>{{ t.lp_why_3_d }}</p></div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="lp-final" id="host">
+    <h2>{{ t.lp_final_t }}</h2>
+    <p>{{ t.lp_final_d }}</p>
+    <a class="lp-btn lp-btn-primary" href="mailto:hello@alialiabadi.ir?subject={{ t.lp_cta_host|urlencode }}">{{ t.lp_cta_host }}</a>
+  </section>
+
+  <div class="lp-footer">{{ t.lp_footer }} — {{ t.site_name }}</div>
+</div>
+
+<div class="film-edge"></div>
+{% endblock %}

@@ -18,6 +18,12 @@ def _session_guest(request, event):
     return Guest.objects.filter(event=event, token=token).first()
 
 
+@require_http_methods(["GET"])
+def landing(request):
+    """Public marketing home at the site root."""
+    return render(request, "snap/landing.html")
+
+
 @require_http_methods(["GET", "POST"])
 def join(request, slug):
     event = get_object_or_404(Event, slug=slug)

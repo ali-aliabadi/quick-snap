@@ -3,7 +3,10 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from snap import views as snap_views
+
 urlpatterns = [
+    path("", snap_views.landing, name="landing"),
     path("admin/", admin.site.urls),
     path("e/", include("snap.urls")),
 ]
