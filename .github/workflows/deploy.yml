@@ -1,9 +1,9 @@
 name: Deploy to VPS
 
-# Ships main to the German VPS on every push (and on manual dispatch).
+# Ships master to the German VPS on every push (and on manual dispatch).
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 concurrency:

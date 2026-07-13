@@ -9,9 +9,9 @@ COMPOSE="docker compose -f docker-compose.prod.yml"
 
 cd "$APP_DIR"
 
-echo "==> Fetching latest main"
+echo "==> Fetching latest master"
 git fetch --prune origin
-git reset --hard origin/main
+git reset --hard origin/master
 
 echo "==> Building and restarting stack"
 $COMPOSE up -d --build
