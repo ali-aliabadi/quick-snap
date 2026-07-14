@@ -52,15 +52,22 @@
     #endcd:empty { display:none; }
 
     #switch {
-      position:fixed; top:calc(env(safe-area-inset-top) + 14px); right:16px;
-      background:rgba(14,10,7,.72); color:var(--ivory); border:1px solid rgba(243,234,217,.18);
-      border-radius:3px; padding:8px 12px; font-family:inherit; font-size:.62rem;
-      letter-spacing:.18em; text-transform:uppercase;
+      position:absolute; right:28px; bottom:calc(env(safe-area-inset-bottom) + 47px);
+      width:52px; height:52px; border-radius:50%;
+      background:rgba(14,10,7,.72); color:var(--ivory); border:1px solid rgba(243,234,217,.22);
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      backdrop-filter:blur(8px); transition:transform .15s, background .15s;
     }
+    html[dir="rtl"] #switch { right:auto; left:28px; }
+    #switch:active { transform:scale(.92); background:rgba(14,10,7,.9); }
+    #switch svg { width:24px; height:24px; }
 
     .controls {
       position:fixed; left:0; right:0; bottom:0; display:flex; flex-direction:column;
       align-items:center; gap:14px; padding-bottom:calc(env(safe-area-inset-bottom) + 34px);
+    }
+    .shutter-row {
+      display:flex; align-items:center; justify-content:center;
     }
     /* mechanical shutter release — the one red thing in the whole app */
     #snap {
@@ -107,13 +114,20 @@
   <div id="flash"></div>
   <div class="brackets"><i></i></div>
 
-  <button id="switch" type="button">{{ t.flip }}</button>
   <div id="counter"><span class="num">0</span><span class="lab">{{ t.exp_left }}</span></div>
   <div id="endcd"></div>
 
   <div class="controls">
-    <button id="snap" type="button" aria-label="Take photo"></button>
+    <div class="shutter-row">
+      <button id="snap" type="button" aria-label="Take photo"></button>
+    </div>
     <div id="hint">{{ t.tap_expose }}</div>
+    <button id="switch" type="button" aria-label="{{ t.flip }}" title="{{ t.flip }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 8a8 8 0 00-14-3M4 5v3h3"/>
+        <path d="M4 16a8 8 0 0014 3M20 19v-3h-3"/>
+      </svg>
+    </button>
   </div>
 
   <div id="gate">
@@ -145,6 +159,8 @@
     const faDigit = s => fa ? s.replace(/[0-9]/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]) : s;
     let facing = "environment";
     let stream = null;
+    let track = null;
+    let imageCapture = null;
     let busy = false;
 
     const video = document.getElementById("video");
@@ -201,14 +217,69 @@
     async function startCamera() {
       overlay.classList.remove("show");
       if (stream) stream.getTracks().forEach(t => t.stop());
+      track = null; imageCapture = null;
       try {
+        // Ask for the highest resolution the device will give us; the browser
+        // clamps to the sensor's real max. Continuous autofocus keeps guests'
+        // shots sharp without a tap-to-focus step.
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facing }, audio: false
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 4096 },
+            height: { ideal: 2160 },
+            frameRate: { ideal: 30 },
+          },
+          audio: false,
         });
         video.srcObject = stream;
+        track = stream.getVideoTracks()[0];
+
+        // Best-effort focus/exposure hints (ignored where unsupported).
+        try {
+          const caps = track.getCapabilities ? track.getCapabilities() : {};
+          const adv = [];
+          if (caps.focusMode && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
+          if (caps.exposureMode && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
+          if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes("continuous")) adv.push({ whiteBalanceMode: "continuous" });
+          if (adv.length) await track.applyConstraints({ advanced: adv });
+        } catch (e) { /* focus hints are optional */ }
+
+        // ImageCapture gives us a full-resolution still (not the downscaled
+        // preview frame). Feature-detected; we fall back to the canvas path.
+        if (window.ImageCapture && track) {
+          try { imageCapture = new ImageCapture(track); } catch (e) { imageCapture = null; }
+        }
       } catch (err) {
         showOverlay(T.camErr, true);
       }
+    }
+
+    async function grabBlob() {
+      // Preferred: full-resolution photo straight from the sensor.
+      if (imageCapture) {
+        try {
+          const blob = await imageCapture.takePhoto();
+          if (blob && blob.size > 0 && facing !== "user") return blob;
+          // Front camera: mirror to match the preview, so re-encode via canvas.
+          if (blob && blob.size > 0) return await mirrorBlob(blob);
+        } catch (e) { /* fall through to canvas */ }
+      }
+      // Fallback: draw the current preview frame at its native size.
+      const w = video.videoWidth, h = video.videoHeight;
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (facing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(video, 0, 0, w, h);
+      return await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
+    }
+
+    async function mirrorBlob(blob) {
+      const bmp = await createImageBitmap(blob);
+      canvas.width = bmp.width; canvas.height = bmp.height;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(bmp.width, 0); ctx.scale(-1, 1);
+      ctx.drawImage(bmp, 0, 0);
+      return await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.95));
     }
 
     async function takePhoto() {
@@ -216,15 +287,9 @@
       if (!started() || ended()) return;
       busy = true; snap.disabled = true;
 
-      const w = video.videoWidth, h = video.videoHeight;
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (facing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(video, 0, 0, w, h);
-
       flash.classList.remove("fire"); void flash.offsetWidth; flash.classList.add("fire");
 
-      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", 0.9));
+      const blob = await grabBlob();
       const fd = new FormData();
       fd.append("image", blob, "snap.jpg");
 

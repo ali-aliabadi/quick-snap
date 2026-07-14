@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .emails import send_roll_email
@@ -22,6 +23,22 @@ def _session_guest(request, event):
 def landing(request):
     """Public marketing home at the site root."""
     return render(request, "snap/landing.html")
+
+
+@require_http_methods(["GET"])
+def events(request):
+    """Public index of joinable events, so guests without a QR can find them."""
+    now = timezone.now()
+    qs = Event.objects.filter(is_active=True).order_by("start_at", "name")
+    visible = [e for e in qs if not e.has_ended]  # hide finished events
+
+    def status(e):
+        if not e.has_started:
+            return "soon"
+        return "open"
+
+    items = [{"event": e, "status": status(e)} for e in visible]
+    return render(request, "snap/events.html", {"items": items, "now": now})
 
 
 @require_http_methods(["GET", "POST"])

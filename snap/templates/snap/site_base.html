@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="{{ lang }}" dir="{% if rtl %}rtl{% else %}ltr{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Quick Snap{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Space+Mono:wght@400;700&family=Vazirmatn:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper:#FCFBF9;          /* warm daylight white */
+      --paper-2:#F4F1EB;        /* soft alt section */
+      --ink:#1F1913;            /* warm near-black text */
+      --ink-soft:#6E6357;       /* muted body */
+      --amber:#D98A22;          /* accent — readable on white */
+      --amber-bright:#F0A63A;   /* fills / glows (from the app) */
+      --amber-soft:rgba(217,138,34,.12);
+      --line:rgba(31,25,19,.10);
+      --card:#FFFFFF;
+      --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+      --font-display:"Fraunces",Georgia,serif;
+      --font-mono:"Space Mono",ui-monospace,monospace;
+    }
+    html[dir="rtl"] {
+      --font-body:"Vazirmatn",system-ui,sans-serif;
+      --font-display:"Vazirmatn",serif;
+      --font-mono:"Vazirmatn","Space Mono",monospace;
+    }
+    html[dir="rtl"] .eyebrow, html[dir="rtl"] .btn, html[dir="rtl"] .nav-links a,
+    html[dir="rtl"] .kicker, html[dir="rtl"] .chip {
+      letter-spacing:0; text-transform:none;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body {
+      margin:0; background:var(--paper); color:var(--ink);
+      font-family:var(--font-body); line-height:1.6;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    }
+    a { color:inherit; }
+    .wrap { width:100%; max-width:1080px; margin:0 auto; padding:0 24px; }
+
+    /* --- Nav --- */
+    .nav {
+      position:sticky; top:0; z-index:50;
+      background:color-mix(in srgb, var(--paper) 82%, transparent);
+      backdrop-filter:saturate(1.4) blur(12px);
+      border-bottom:1px solid var(--line);
+    }
+    .nav-in { display:flex; align-items:center; justify-content:space-between; height:58px; }
+    .brand {
+      display:flex; align-items:center; gap:9px; text-decoration:none;
+      font-family:var(--font-display); font-weight:500; font-size:1.12rem; letter-spacing:-.01em;
+    }
+    .brand .lens {
+      width:16px; height:16px; border-radius:50%;
+      background:radial-gradient(circle at 34% 32%, var(--amber-bright), var(--amber) 62%, #9a5f14);
+      box-shadow:0 0 0 2px rgba(217,138,34,.18);
+    }
+    .nav-links { display:flex; align-items:center; gap:26px; }
+    .nav-links a {
+      text-decoration:none; color:var(--ink-soft); font-size:.9rem;
+      transition:color .15s;
+    }
+    .nav-links a:hover { color:var(--ink); }
+    .nav-links .btn { color:#fff; }
+
+    /* --- Buttons --- */
+    .btn {
+      display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+      padding:11px 20px; border-radius:100px; font-size:.92rem; font-weight:600;
+      border:1px solid transparent; cursor:pointer; transition:transform .08s, background .15s, border-color .15s;
+      font-family:var(--font-body);
+    }
+    .btn:active { transform:translateY(1px); }
+    .btn-primary { background:var(--ink); color:#fff; }
+    .btn-primary:hover { background:#000; }
+    .btn-ghost { background:transparent; color:var(--ink); border-color:var(--line); }
+    .btn-ghost:hover { border-color:var(--ink); }
+    .btn-amber { background:var(--amber); color:#fff; }
+    .btn-amber:hover { filter:brightness(1.05); }
+
+    /* --- Shared bits --- */
+    .eyebrow, .kicker {
+      font-family:var(--font-mono); font-size:.72rem; letter-spacing:.22em;
+      text-transform:uppercase; color:var(--amber);
+    }
+    .foot {
+      border-top:1px solid var(--line); margin-top:20px;
+      padding:34px 0; color:var(--ink-soft); font-size:.85rem;
+    }
+    .foot-in { display:flex; flex-wrap:wrap; gap:14px 26px; align-items:center; justify-content:space-between; }
+    .foot a { text-decoration:none; color:var(--ink-soft); }
+    .foot a:hover { color:var(--ink); }
+
+    :focus-visible { outline:2px solid var(--amber); outline-offset:3px; border-radius:4px; }
+    @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto;} *{transition:none!important;animation:none!important;} }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="{% url 'landing' %}"><span class="lens"></span>{{ t.site_name }}</a>
+      <div class="nav-links">
+        <a href="{% url 'landing' %}#how">{{ t.nav_how }}</a>
+        <a href="{% url 'events' %}">{{ t.nav_events }}</a>
+        <a class="btn btn-primary" href="{% url 'admin:index' %}">{{ t.nav_host }}</a>
+      </div>
+    </div>
+  </nav>
+
+  {% block body %}{% endblock %}
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <span>{{ t.lp_footer }}</span>
+      <span>© {{ t.site_name }}</span>
+    </div>
+  </footer>
+</body>
+</html>

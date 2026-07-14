@@ -375,3 +375,42 @@ class I18nTests(TestCase):
         ev = make_event(password="pw")
         r = self.client.get(reverse("snap:join", args=[ev.slug]))
         self.assertContains(r, 'dir="ltr"')
+
+
+class PublicPagesTests(TestCase):
+    def test_landing_renders(self):
+        r = self.client.get(reverse("landing"))
+        self.assertEqual(r.status_code, 200)
+        self.assertTemplateUsed(r, "snap/landing.html")
+
+    def test_events_lists_open_and_upcoming(self):
+        make_event(name="Open now", slug="open-now", password="pw")
+        soon = make_event(
+            name="Starts later",
+            slug="starts-later",
+            password="pw",
+            start_at=timezone.now() + timedelta(days=1),
+        )
+        r = self.client.get(reverse("events"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Open now")
+        self.assertContains(r, "Starts later")
+        # upcoming event is flagged, not shown as open
+        self.assertEqual([i["event"].pk for i in r.context["items"] if i["status"] == "soon"], [soon.pk])
+
+    def test_events_hides_inactive_and_ended(self):
+        make_event(name="Closed", slug="closed", password="pw", is_active=False)
+        make_event(
+            name="Finished",
+            slug="finished",
+            password="pw",
+            end_at=timezone.now() - timedelta(hours=1),
+        )
+        r = self.client.get(reverse("events"))
+        self.assertNotContains(r, "Closed")
+        self.assertNotContains(r, "Finished")
+
+    def test_events_empty_state(self):
+        r = self.client.get(reverse("events"))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(list(r.context["items"]), [])

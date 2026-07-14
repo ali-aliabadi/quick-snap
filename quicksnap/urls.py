@@ -7,6 +7,7 @@ from snap import views as snap_views
 
 urlpatterns = [
     path("", snap_views.landing, name="landing"),
+    path("events/", snap_views.events, name="events"),
     path("admin/", admin.site.urls),
     path("e/", include("snap.urls")),
 ]

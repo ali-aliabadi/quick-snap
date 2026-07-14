@@ -1,129 +1,140 @@
-{% extends "snap/base.html" %}
+{% extends "snap/site_base.html" %}
 {% block title %}{{ t.site_name }} — {{ t.lp_eyebrow }}{% endblock %}
 
 {% block head %}
 <style>
-  /* Landing overrides the base's centered single-column flow. */
-  body.lp { display:block; justify-content:flex-start; }
-  body.lp .film-edge { max-width:100%; }
-  .lp-wrap { width:100%; max-width:920px; margin:0 auto; padding:0 22px; }
+  /* ---------- Hero ---------- */
+  .hero { padding:76px 0 44px; text-align:center; }
+  .hero .eyebrow { display:inline-block; margin-bottom:20px; }
+  .hero h1 {
+    font-family:var(--font-display); font-weight:400; letter-spacing:-.025em;
+    font-size:clamp(3rem,9vw,6rem); line-height:.98; margin:0;
+    color:var(--ink);
+  }
+  .hero h1 .amber {
+    font-style:italic; font-weight:500;
+    background:linear-gradient(120deg,var(--amber),#E8A93E);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero p {
+    color:var(--ink-soft); font-size:clamp(1.05rem,2.4vw,1.3rem);
+    max-width:38ch; margin:24px auto 0;
+  }
+  .hero-actions { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:34px; }
+  .hero .btn { padding:14px 28px; font-size:1rem; }
 
-  /* --- Hero --- */
-  .lp-hero { padding:64px 0 20px; }
-  .lp-hero .eyebrow { margin-top:0; }
-  .lp-title {
-    font-family:var(--font-display); font-weight:500; letter-spacing:-.02em;
-    font-size:clamp(2.8rem, 9vw, 5.2rem); line-height:.98; margin:6px 0 0;
-  }
-  .lp-sub {
-    color:var(--muted); font-size:clamp(1rem,2.4vw,1.18rem); line-height:1.65;
-    max-width:34ch; margin:20px 0 0;
-  }
-  .lp-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:30px; }
-  .lp-btn {
-    width:auto; margin:0; display:inline-block; text-decoration:none;
-    padding:14px 26px; border-radius:3px;
-    font-family:var(--font-mono); font-size:.82rem; font-weight:700;
-    letter-spacing:.14em; text-transform:uppercase;
-  }
-  .lp-btn-primary { background:var(--safelight); color:#1A120A; }
-  .lp-btn-ghost {
-    background:transparent; color:var(--ivory); border:1px solid var(--panel-edge);
-  }
-  .lp-btn-ghost:hover { border-color:var(--safelight); color:var(--safelight); }
-
-  /* --- Signature: the filmstrip --- */
+  /* ---------- Signature: the filmstrip, now daylight ---------- */
+  .strip-scene { padding:20px 0 64px; }
   .filmstrip {
-    margin:52px 0 8px; border-radius:6px; overflow:hidden;
-    background:var(--sprocket);
-    border-block:14px solid transparent;
-    /* sprocket-hole rails top & bottom via border-box gradients */
+    max-width:960px; margin:0 auto; border-radius:14px; overflow:hidden;
+    background:#241C15; padding:16px 0;
+    box-shadow:0 30px 70px -30px rgba(31,25,19,.45), 0 8px 20px -10px rgba(31,25,19,.25);
     background-image:
-      radial-gradient(circle at 14px 7px, var(--film-black) 0 3.2px, transparent 4px),
-      radial-gradient(circle at 14px calc(100% - 7px), var(--film-black) 0 3.2px, transparent 4px);
-    background-size:28px 14px, 28px 14px;
-    background-position:top left, bottom left;
-    background-repeat:repeat-x, repeat-x;
+      radial-gradient(circle at 16px 9px, #0E0A07 0 3.4px, transparent 4.2px),
+      radial-gradient(circle at 16px calc(100% - 9px), #0E0A07 0 3.4px, transparent 4.2px);
+    background-size:32px 18px,32px 18px;
+    background-position:top left,bottom left; background-repeat:repeat-x;
   }
-  .frames { display:flex; gap:6px; padding:10px 6px; overflow-x:auto; scrollbar-width:none; }
-  .frames::-webkit-scrollbar { display:none; }
+  .frames { display:flex; gap:8px; padding:0 14px; overflow-x:auto; scrollbar-width:none; }
+  .frames::-webkit-scrollbar{ display:none; }
   .frame {
-    flex:0 0 auto; width:132px; height:104px; border-radius:3px;
-    background:var(--panel); border:1px solid var(--panel-edge);
-    position:relative; display:flex; align-items:flex-end; padding:9px;
-    background-image:radial-gradient(120% 90% at 50% 0%, var(--safelight-dim), transparent 62%);
+    flex:0 0 auto; width:168px; height:120px; border-radius:5px; position:relative;
+    display:flex; align-items:flex-end; padding:10px;
+    background:linear-gradient(150deg,#4a3a2a,#2a2018);
   }
+  .frame:nth-child(2){ background:linear-gradient(150deg,#5a4636,#332618); }
+  .frame:nth-child(3){ background:linear-gradient(150deg,#6b4a2e,#3a2a1a); }
+  .frame:nth-child(4){ background:linear-gradient(150deg,#4a4234,#2c2820); }
+  .frame:nth-child(5){ background:linear-gradient(150deg,#5c4230,#342014); }
   .frame .exp {
-    font-family:var(--font-mono); font-size:.62rem; letter-spacing:.14em;
-    color:var(--safelight); text-transform:uppercase; opacity:.9;
+    font-family:var(--font-mono); font-size:.6rem; letter-spacing:.14em;
+    color:var(--amber-bright); text-transform:uppercase;
   }
-  .frame.qr { align-items:center; justify-content:center; background:var(--panel); }
+  .frame.qr { align-items:center; justify-content:center; background:#1b140e; }
   .frame.qr .qr-grid {
-    width:56px; height:56px;
-    background:
-      conic-gradient(from 90deg at 50% 50%, var(--ivory) 25%, transparent 0) 0 0/14px 14px,
-      linear-gradient(var(--ivory),var(--ivory));
-    -webkit-mask:radial-gradient(circle at 7px 7px, #000 3px, transparent 4px) 0 0/14px 14px;
-            mask:radial-gradient(circle at 7px 7px, #000 3px, transparent 4px) 0 0/14px 14px;
-    opacity:.85; border-radius:2px;
+    width:64px; height:64px;
+    background:linear-gradient(#f3ead9,#f3ead9);
+    -webkit-mask:radial-gradient(circle at 8px 8px,#000 3.4px,transparent 4.4px) 0 0/16px 16px;
+            mask:radial-gradient(circle at 8px 8px,#000 3.4px,transparent 4.4px) 0 0/16px 16px;
+    border-radius:3px;
   }
 
-  /* --- Sections --- */
-  .lp-section { padding:46px 0; border-top:1px solid var(--panel-edge); }
-  .lp-section .eyebrow { margin:0 0 22px; }
-  .grid { display:grid; gap:14px; grid-template-columns:repeat(3,1fr); }
-  .card {
-    background:var(--panel); border:1px solid var(--panel-edge); border-radius:4px;
-    padding:22px;
+  /* ---------- How it works ---------- */
+  .section { padding:72px 0; border-top:1px solid var(--line); }
+  .section-head { text-align:center; max-width:40ch; margin:0 auto 48px; }
+  .section-head .kicker { display:inline-block; margin-bottom:14px; }
+  .section-head h2 {
+    font-family:var(--font-display); font-weight:400; letter-spacing:-.02em;
+    font-size:clamp(2rem,5vw,3rem); line-height:1.05; margin:0;
   }
-  .card .mark {
-    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.2em;
-    color:var(--safelight); display:block; margin-bottom:14px;
+  .steps { display:grid; gap:20px; grid-template-columns:repeat(3,1fr); }
+  .step { text-align:center; }
+  .step .badge {
+    width:52px; height:52px; margin:0 auto 18px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--amber-soft); color:var(--amber);
+    font-family:var(--font-mono); font-weight:700; font-size:1.05rem;
   }
-  .card h3 {
-    font-family:var(--font-display); font-weight:500; font-size:1.35rem;
-    margin:0 0 8px; letter-spacing:-.01em;
-  }
-  .card p { color:var(--muted); font-size:.92rem; line-height:1.6; margin:0; }
+  .step h3 { font-family:var(--font-display); font-weight:500; font-size:1.35rem; margin:0 0 8px; }
+  .step p { color:var(--ink-soft); font-size:.95rem; margin:0 auto; max-width:26ch; }
 
-  /* --- Final CTA --- */
-  .lp-final { padding:56px 0 40px; border-top:1px solid var(--panel-edge); text-align:center; }
-  .lp-final h2 {
-    font-family:var(--font-display); font-weight:500; letter-spacing:-.015em;
-    font-size:clamp(1.9rem,5vw,2.8rem); line-height:1.05; margin:0 auto; max-width:18ch;
+  /* ---------- Why (alt bg) ---------- */
+  .why { background:var(--paper-2); }
+  .why-grid { display:grid; gap:16px; grid-template-columns:repeat(3,1fr); }
+  .why-card {
+    background:var(--card); border:1px solid var(--line); border-radius:16px; padding:28px;
+    transition:transform .18s, box-shadow .18s;
   }
-  .lp-final p { color:var(--muted); margin:16px auto 26px; max-width:40ch; line-height:1.6; }
-  .lp-footer {
-    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.14em;
-    color:var(--muted); text-transform:uppercase; text-align:center;
-    padding:22px 0 40px; opacity:.75;
+  .why-card:hover { transform:translateY(-3px); box-shadow:0 18px 40px -22px rgba(31,25,19,.3); }
+  .why-card .ic {
+    width:40px; height:40px; border-radius:11px; margin-bottom:16px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--amber-soft);
   }
+  .why-card .ic svg { width:21px; height:21px; stroke:var(--amber); fill:none; stroke-width:1.8; }
+  .why-card h3 { font-family:var(--font-display); font-weight:500; font-size:1.25rem; margin:0 0 7px; }
+  .why-card p { color:var(--ink-soft); font-size:.93rem; margin:0; }
 
-  @media (max-width:640px) {
-    .grid { grid-template-columns:1fr; }
-    .lp-hero { padding-top:44px; }
+  /* ---------- Final CTA ---------- */
+  .final { text-align:center; }
+  .final-card {
+    max-width:760px; margin:0 auto; border-radius:24px; padding:60px 32px;
+    background:linear-gradient(160deg,#241C15,#3a2c1c);
+    color:var(--paper); position:relative; overflow:hidden;
+  }
+  .final-card::after {
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(90% 70% at 50% -10%, rgba(240,166,58,.28), transparent 60%);
+    pointer-events:none;
+  }
+  .final-card h2 {
+    font-family:var(--font-display); font-weight:400; letter-spacing:-.02em;
+    font-size:clamp(1.9rem,5vw,2.8rem); line-height:1.08; margin:0 auto; max-width:18ch; position:relative;
+  }
+  .final-card p { color:rgba(243,234,217,.75); margin:16px auto 28px; max-width:38ch; position:relative; }
+  .final-card .btn { position:relative; }
+
+  @media (max-width:720px){
+    .steps,.why-grid{ grid-template-columns:1fr; }
+    .frame{ width:140px; height:104px; }
   }
 </style>
 {% endblock %}
 
-{% block body_class %}lp{% endblock %}
-
 {% block body %}
-<div class="film-edge"></div>
+<!-- Hero -->
+<header class="hero wrap">
+  <span class="eyebrow">{{ t.lp_eyebrow }}</span>
+  <h1>{{ t.lp_h1_a }} <span class="amber">{{ t.lp_h1_b }}</span></h1>
+  <p>{{ t.lp_hero_sub }}</p>
+  <div class="hero-actions">
+    <a class="btn btn-amber" href="{% url 'events' %}">{{ t.lp_cta_browse }}</a>
+    <a class="btn btn-ghost" href="#how">{{ t.nav_how }}</a>
+  </div>
+</header>
 
-<div class="lp-wrap">
-  <!-- Hero: the thesis -->
-  <header class="lp-hero">
-    <div class="eyebrow">{{ t.lp_eyebrow }}</div>
-    <h1 class="lp-title">{{ t.lp_hero_title|linebreaksbr }}</h1>
-    <p class="lp-sub">{{ t.lp_hero_sub }}</p>
-    <div class="lp-actions">
-      <a class="lp-btn lp-btn-primary" href="#host">{{ t.lp_cta_host }}</a>
-      <a class="lp-btn lp-btn-ghost" href="{% url 'admin:index' %}">{{ t.lp_cta_signin }}</a>
-    </div>
-  </header>
-
-  <!-- Signature: a loaded roll of exposures -->
+<!-- Signature filmstrip -->
+<div class="strip-scene wrap">
   <div class="filmstrip" aria-hidden="true">
     <div class="frames">
       <div class="frame"><span class="exp">EXP 01</span></div>
@@ -134,37 +145,54 @@
       <div class="frame qr"><div class="qr-grid"></div></div>
     </div>
   </div>
-  <p class="lp-sub" style="max-width:44ch">{{ t.lp_scan_hint }}</p>
-
-  <!-- How it works: a real sequence, so numbers are earned -->
-  <section class="lp-section">
-    <div class="eyebrow">{{ t.lp_how_eyebrow }}</div>
-    <div class="grid">
-      <div class="card"><span class="mark">01</span><h3>{{ t.lp_how_1_t }}</h3><p>{{ t.lp_how_1_d }}</p></div>
-      <div class="card"><span class="mark">02</span><h3>{{ t.lp_how_2_t }}</h3><p>{{ t.lp_how_2_d }}</p></div>
-      <div class="card"><span class="mark">03</span><h3>{{ t.lp_how_3_t }}</h3><p>{{ t.lp_how_3_d }}</p></div>
-    </div>
-  </section>
-
-  <!-- Why: value props, not a sequence — no numbers -->
-  <section class="lp-section">
-    <div class="eyebrow">{{ t.lp_why_eyebrow }}</div>
-    <div class="grid">
-      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_1_t }}</h3><p>{{ t.lp_why_1_d }}</p></div>
-      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_2_t }}</h3><p>{{ t.lp_why_2_d }}</p></div>
-      <div class="card"><span class="mark">●</span><h3>{{ t.lp_why_3_t }}</h3><p>{{ t.lp_why_3_d }}</p></div>
-    </div>
-  </section>
-
-  <!-- Final CTA -->
-  <section class="lp-final" id="host">
-    <h2>{{ t.lp_final_t }}</h2>
-    <p>{{ t.lp_final_d }}</p>
-    <a class="lp-btn lp-btn-primary" href="mailto:hello@alialiabadi.ir?subject={{ t.lp_cta_host|urlencode }}">{{ t.lp_cta_host }}</a>
-  </section>
-
-  <div class="lp-footer">{{ t.lp_footer }} — {{ t.site_name }}</div>
 </div>
 
-<div class="film-edge"></div>
+<!-- How it works -->
+<section class="section" id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">{{ t.lp_how_eyebrow }}</span>
+      <h2>{{ t.lp_scan_hint }}</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="badge">01</div><h3>{{ t.lp_how_1_t }}</h3><p>{{ t.lp_how_1_d }}</p></div>
+      <div class="step"><div class="badge">02</div><h3>{{ t.lp_how_2_t }}</h3><p>{{ t.lp_how_2_d }}</p></div>
+      <div class="step"><div class="badge">03</div><h3>{{ t.lp_how_3_t }}</h3><p>{{ t.lp_how_3_d }}</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Why -->
+<section class="section why">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">{{ t.lp_why_eyebrow }}</span>
+    </div>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M3 8l2-3h4l1-2h4l1 2h4l2 3v9a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke-linejoin="round"/></svg></div>
+        <h3>{{ t.lp_why_1_t }}</h3><p>{{ t.lp_why_1_d }}</p>
+      </div>
+      <div class="why-card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5" stroke-linecap="round"/></svg></div>
+        <h3>{{ t.lp_why_2_t }}</h3><p>{{ t.lp_why_2_d }}</p>
+      </div>
+      <div class="why-card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M5 4h14v16l-7-4-7 4V4z" stroke-linejoin="round"/></svg></div>
+        <h3>{{ t.lp_why_3_t }}</h3><p>{{ t.lp_why_3_d }}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="section final">
+  <div class="wrap">
+    <div class="final-card">
+      <h2>{{ t.lp_final_t }}</h2>
+      <p>{{ t.lp_final_d }}</p>
+      <a class="btn btn-amber" href="{% url 'events' %}">{{ t.lp_cta_browse }}</a>
+    </div>
+  </div>
+</section>
 {% endblock %}
