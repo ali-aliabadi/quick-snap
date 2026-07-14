@@ -396,7 +396,10 @@ class PublicPagesTests(TestCase):
         self.assertContains(r, "Open now")
         self.assertContains(r, "Starts later")
         # upcoming event is flagged, not shown as open
-        self.assertEqual([i["event"].pk for i in r.context["items"] if i["status"] == "soon"], [soon.pk])
+        self.assertEqual(
+            [i["event"].pk for i in r.context["items"] if i["status"] == "soon"],
+            [soon.pk],
+        )
 
     def test_events_hides_inactive_and_ended(self):
         make_event(name="Closed", slug="closed", password="pw", is_active=False)

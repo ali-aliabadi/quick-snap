@@ -70,6 +70,7 @@ STRINGS = {
         "tap_expose": "برای ثبت بزن — بدون تکرار",
         "gate_opens": "عکاسی شروع می‌شود تا",
         "cam_err": "دوربین در دسترس نیست. اجازه بده و دوباره تلاش کن.",
+        "cam_sending": "در حال ثبت",
         "upload_err": "این عکس ارسال نشد. اتصال را بررسی کن و دوباره تلاش کن.",
         "retry": "تلاش دوباره",
         # done
@@ -143,6 +144,7 @@ STRINGS = {
         "tap_expose": "Tap to expose — no retakes",
         "gate_opens": "Snapping opens in",
         "cam_err": "Can't reach the camera. Allow access, then retry.",
+        "cam_sending": "Developing",
         "upload_err": "That shot didn't upload. Check your connection, then retry.",
         "retry": "Retry",
         "done_eyebrow": "End of roll",
