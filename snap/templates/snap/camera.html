@@ -103,29 +103,40 @@
       backdrop-filter:blur(6px);
     }
     #sending.show { display:flex; }
-    .ring { position:relative; width:132px; height:132px; }
-    .ring svg { width:100%; height:100%; transform:rotate(-90deg); }
-    .ring circle { fill:none; stroke-width:6; stroke-linecap:round; }
-    .ring .track { stroke:rgba(243,234,217,.14); }
+    .ring { position:relative; width:150px; height:150px; }
+    .ring svg { position:absolute; inset:0; width:100%; height:100%; }
+    .ring circle { fill:none; }
+
+    /* Outer decorative spinner — always rotating, hard and mechanical. */
+    .ring .spin-svg { animation:ringspin .85s linear infinite; }
+    .ring .spin {
+      stroke:var(--shutter); stroke-width:4; stroke-linecap:round;
+      stroke-dasharray:70 380; stroke-dashoffset:0;
+      filter:drop-shadow(0 0 5px rgba(214,59,36,.6));
+    }
+    @keyframes ringspin { to { transform:rotate(360deg); } }
+
+    /* Inner progress ring — fills like a bar as bytes upload. */
+    .ring .prog-svg { transform:rotate(-90deg); }
+    .ring .track { stroke:rgba(243,234,217,.12); stroke-width:7; }
     .ring .prog {
-      stroke:var(--safelight);
+      stroke:var(--safelight); stroke-width:7; stroke-linecap:round;
       stroke-dasharray:326.726; stroke-dashoffset:326.726;
       filter:drop-shadow(0 0 6px rgba(240,166,58,.55));
       transition:stroke-dashoffset .25s ease;
     }
-    /* Indeterminate: spin the whole ring while a short arc shows, no % yet. */
-    #sending.indeterminate .ring svg { animation:ringspin 1s linear infinite; }
-    #sending.indeterminate .ring .prog {
-      stroke-dasharray:82 326.726; stroke-dashoffset:0; transition:none;
-    }
-    @keyframes ringspin { to { transform:rotate(270deg); } }
+    /* Before the upload starts (capturing/encoding), the progress ring is
+       empty and the % is hidden — only the outer spinner shows motion. */
+    #sending.indeterminate .ring .prog { transition:none; }
+    #sending.indeterminate .ring .pct { opacity:0; }
+
     .ring .pct {
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      gap:1px; color:var(--ivory); font-weight:700; font-size:1.9rem;
+      gap:1px; color:var(--ivory); font-weight:700; font-size:2rem;
       font-variant-numeric:tabular-nums; text-shadow:0 0 12px rgba(240,166,58,.4);
+      transition:opacity .2s;
     }
-    .ring .pct i { font-style:normal; font-size:.9rem; color:var(--muted); align-self:flex-start; margin-top:6px; }
-    #sending.indeterminate .ring .pct { opacity:0; }
+    .ring .pct i { font-style:normal; font-size:.9rem; color:var(--muted); align-self:flex-start; margin-top:8px; }
     .send-label {
       font-size:.68rem; letter-spacing:.28em; text-transform:uppercase; color:var(--muted);
     }
