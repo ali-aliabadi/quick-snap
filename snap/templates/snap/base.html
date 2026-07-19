@@ -115,7 +115,27 @@
       text-transform:uppercase;
     }
 
-    @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+    /* --- Motion: the roll loads in. Edges slide from the sprockets, --- */
+    /* --- the stage develops (fade + settle) just after.             --- */
+    @keyframes edge-in { from { opacity:0; transform:scaleX(.4); } to { opacity:1; transform:none; } }
+    @keyframes develop { from { opacity:0; transform:translateY(14px); filter:blur(6px); }
+                         to   { opacity:1; transform:none; filter:none; } }
+    body > .film-edge { animation:edge-in .55s cubic-bezier(.2,.7,.2,1) both; }
+    .stage { animation:develop .7s cubic-bezier(.2,.7,.2,1) .12s both; }
+
+    /* shine sweep across the primary button on hover */
+    button, .btn { position:relative; overflow:hidden; }
+    button::after, .btn::after {
+      content:""; position:absolute; top:0; bottom:0; left:-40%; width:35%;
+      background:linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent);
+      transform:skewX(-18deg); opacity:0; pointer-events:none;
+    }
+    button:hover::after, .btn:hover::after { animation:shine .7s ease; }
+    @keyframes shine { from { left:-40%; opacity:1; } to { left:130%; opacity:0; } }
+
+    @media (prefers-reduced-motion:reduce) {
+      * { transition:none !important; animation:none !important; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>

@@ -41,7 +41,14 @@
       box-shadow:0 0 18px rgba(240,166,58,.18);
     }
     #counter .num { font-size:1.55rem; font-weight:700; color:var(--safelight);
-      font-variant-numeric:tabular-nums; line-height:1; text-shadow:0 0 10px rgba(240,166,58,.5); }
+      font-variant-numeric:tabular-nums; line-height:1; text-shadow:0 0 10px rgba(240,166,58,.5);
+      display:inline-block; }
+    #counter .num.tick { animation:count-tick .35s cubic-bezier(.2,.8,.2,1); }
+    @keyframes count-tick {
+      0%{ transform:translateY(-.5em) scale(1.35); opacity:.2; }
+      60%{ transform:translateY(.06em) scale(1); opacity:1; }
+      100%{ transform:none; }
+    }
     #counter .lab { font-size:.62rem; letter-spacing:.24em; color:var(--muted); text-transform:uppercase; }
 
     #endcd {
@@ -76,7 +83,9 @@
       box-shadow:0 0 0 6px rgba(0,0,0,.35), inset 0 -3px 8px rgba(0,0,0,.4);
       transition:transform .07s;
     }
-    #snap:active { transform:scale(.9); }
+    #snap:active { transform:scale(.86); }
+    #snap.recoil { animation:recoil .28s cubic-bezier(.2,.8,.2,1); }
+    @keyframes recoil { 0%{ transform:scale(.86); } 55%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
     #snap:disabled { background:#5a4b40; border-color:rgba(243,234,217,.35); }
     #hint { color:rgba(243,234,217,.72); font-size:.64rem; letter-spacing:.22em;
       text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.7); }
@@ -91,7 +100,9 @@
     #gate.show, #overlay.show { display:flex; }
     #gate-msg, #overlay-msg { font-family:"Fraunces",serif; font-weight:500; font-size:1.35rem; }
     #gate-cd { font-size:2.4rem; font-weight:700; color:var(--safelight);
-      font-variant-numeric:tabular-nums; text-shadow:0 0 16px rgba(240,166,58,.4); }
+      font-variant-numeric:tabular-nums; text-shadow:0 0 16px rgba(240,166,58,.4);
+      animation:gate-pulse 1.8s ease-in-out infinite; }
+    @keyframes gate-pulse { 0%,100%{ opacity:.72; } 50%{ opacity:1; text-shadow:0 0 26px rgba(240,166,58,.7); } }
     #overlay-retry { margin-top:12px; padding:13px 26px; border:0; border-radius:3px;
       background:var(--safelight); color:#1A120A; font-family:"Space Mono",monospace;
       font-weight:700; letter-spacing:.16em; text-transform:uppercase; font-size:.82rem; }
@@ -141,7 +152,9 @@
       font-size:.68rem; letter-spacing:.28em; text-transform:uppercase; color:var(--muted);
     }
 
-    @media (prefers-reduced-motion:reduce) { #snap, #flash { transition:none; animation:none; } }
+    @media (prefers-reduced-motion:reduce) {
+      #snap, #flash, #counter .num, #gate-cd { transition:none; animation:none; }
+    }
   </style>
 </head>
 <body
@@ -247,8 +260,14 @@
     function started() { return !startAt || new Date() >= startAt; }
     function ended() { return endAt && new Date() > endAt; }
 
-    function renderCounter() {
-      counterNum.textContent = faDigit(String(remaining).padStart(2, "0"));
+    function renderCounter(animate) {
+      const next = faDigit(String(remaining).padStart(2, "0"));
+      if (animate && next !== counterNum.textContent) {
+        counterNum.classList.remove("tick");
+        void counterNum.offsetWidth;   // restart the animation
+        counterNum.classList.add("tick");
+      }
+      counterNum.textContent = next;
     }
 
     function tickClocks() {
@@ -402,6 +421,7 @@
       busy = true; snap.disabled = true;
 
       flash.classList.remove("fire"); void flash.offsetWidth; flash.classList.add("fire");
+      snap.classList.remove("recoil"); void snap.offsetWidth; snap.classList.add("recoil");
       setProgress(null);            // capturing / encoding: indeterminate
       sending.classList.add("show");
 
@@ -421,7 +441,7 @@
         if (res.status < 200 || res.status >= 300) throw new Error("upload failed");
         const data = JSON.parse(res.text);
         remaining = data.remaining;
-        renderCounter();
+        renderCounter(true);
         if (data.done) { window.location = DONE_URL; return; }
       } catch (e) {
         showOverlay(T.upErr, true);

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "react-patterns": {
+      "source": "jezweb/claude-skills",
+      "sourceType": "github",
+      "skillPath": "plugins/frontend/skills/react-patterns/SKILL.md",
+      "computedHash": "28c2718c8b74b38c21fc03a83cb6c2a4efee86c92cf5b2d1e0e42cdf1674eeed"
+    }
+  }
+}

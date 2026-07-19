@@ -19,6 +19,12 @@
   }
   .ev-card:hover { transform:translateY(-2px); box-shadow:0 18px 40px -24px rgba(31,25,19,.32); border-color:transparent; }
   .ev-card.is-soon { opacity:.9; }
+  /* hover: the lens powers on, the chevron nudges toward the event */
+  .ev-card .lens { transition:box-shadow .25s, transform .25s; }
+  .ev-card:hover .lens { box-shadow:0 0 0 3px rgba(240,166,58,.16), 0 0 16px 2px rgba(240,166,58,.5); transform:scale(1.08); }
+  .ev-go svg { transition:transform .25s cubic-bezier(.2,.7,.2,1); }
+  .ev-card:hover .ev-go svg { transform:translateX(4px); }
+  html[dir="rtl"] .ev-card:hover .ev-go svg { transform:scaleX(-1) translateX(4px); }
   .ev-thumb {
     flex:0 0 auto; width:56px; height:56px; border-radius:13px;
     background:linear-gradient(150deg,#4a3a2a,#2a2018);
@@ -60,7 +66,7 @@
 {% endblock %}
 
 {% block body %}
-<header class="ev-hero wrap">
+<header class="ev-hero wrap" data-reveal>
   <span class="eyebrow">{{ t.site_name }}</span>
   <h1>{{ t.ev_title }}</h1>
   <p>{{ t.ev_sub }}</p>
@@ -70,7 +76,7 @@
   {% if items %}
     <div class="ev-list">
       {% for item in items %}
-        <a class="ev-card is-{{ item.status }}" href="{% url 'snap:join' item.event.slug %}">
+        <a class="ev-card is-{{ item.status }}" href="{% url 'snap:join' item.event.slug %}" data-reveal style="--d:{% widthratio forloop.counter0 1 60 %}ms">
           <div class="ev-thumb"><span class="lens"></span></div>
           <div class="ev-main">
             <p class="ev-name">{{ item.event.name }}</p>
@@ -100,7 +106,7 @@
     </div>
   {% else %}
     <div class="ev-empty">
-      <div class="box">
+      <div class="box" data-reveal>
         <h2>{{ t.ev_empty_t }}</h2>
         <p>{{ t.ev_empty_d }}</p>
       </div>

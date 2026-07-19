@@ -1,5 +1,22 @@
 {% extends "snap/base.html" %}
 {% block title %}Roll complete — {{ event.name }}{% endblock %}
+{% block head %}
+<style>
+  /* The finished roll develops in stages: eyebrow, headline, then details. */
+  @keyframes dev-up { from { opacity:0; transform:translateY(12px); filter:blur(4px); }
+                      to   { opacity:1; transform:none; filter:none; } }
+  .stage .eyebrow { animation:dev-up .6s cubic-bezier(.2,.7,.2,1) .15s both; }
+  .stage h1       { animation:dev-up .8s cubic-bezier(.2,.7,.2,1) .30s both; }
+  .stage .muted   { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .55s both; }
+  .stage .spec    { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .75s both; }
+  /* the exposed-frame count glows warmly as it lands */
+  .stage .muted b { animation:count-glow 1.4s ease-out 1s both; }
+  @keyframes count-glow { 0%{ text-shadow:0 0 18px rgba(240,166,58,.8); } 100%{ text-shadow:none; } }
+  @media (prefers-reduced-motion:reduce){
+    .stage .eyebrow,.stage h1,.stage .muted,.stage .spec,.stage .muted b { animation:none!important; }
+  }
+</style>
+{% endblock %}
 {% block body %}
 <div class="film-edge"></div>
 <div class="stage" style="text-align:center;">

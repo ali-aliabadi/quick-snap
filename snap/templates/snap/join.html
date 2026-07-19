@@ -1,5 +1,19 @@
 {% extends "snap/base.html" %}
 {% block title %}{{ event.name }} — Quick Snap{% endblock %}
+{% block head %}
+<style>
+  /* Countdown reads like a live readout — a slow amber pulse. */
+  .countdown { animation:cd-pulse 2.4s ease-in-out infinite; }
+  @keyframes cd-pulse {
+    0%,100% { box-shadow:inset 2px 0 0 -1px var(--safelight); }
+    50%     { box-shadow:inset 2px 0 0 -1px var(--safelight), 0 0 14px -2px var(--safelight-dim); }
+  }
+  /* Inputs lift a touch when focused, on top of the base focus ring. */
+  input[type=text], input[type=email], input[type=password] { transition:border-color .15s, box-shadow .15s, transform .15s; }
+  input:focus { transform:translateY(-1px); }
+  @media (prefers-reduced-motion:reduce){ .countdown{animation:none!important;} input:focus{transform:none!important;} }
+</style>
+{% endblock %}
 {% block body %}
 <div class="film-edge"></div>
 <div class="stage">
