@@ -11,6 +11,9 @@ db.sqlite3-journal
 
 # Secrets
 .env
+# Local Claude settings — may hold ANTHROPIC_AUTH_TOKEN etc.
+.claude/settings.json
 
 # OS
 .DS_Store
+
