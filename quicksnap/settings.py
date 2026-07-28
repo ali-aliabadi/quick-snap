@@ -87,8 +87,9 @@ TIME_ZONE = env("TIME_ZONE", default="UTC")
 USE_I18N = True
 USE_TZ = True
 
-# UI language for the guest-facing app: "fa" (Persian, RTL) or "en".
-APP_LANG = env("APP_LANG", default="fa")
+# Default UI language for the guest-facing app: "en" or "fa" (Persian, RTL).
+# A per-visitor `ui_lang` cookie (set via the header language toggle) overrides this.
+APP_LANG = env("APP_LANG", default="en")
 
 # --- Static ---
 STATIC_URL = "static/"

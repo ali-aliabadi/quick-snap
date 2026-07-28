@@ -1,8 +1,10 @@
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
+from .context_processors import LANG_COOKIE, SUPPORTED_LANGS
 from .models import Event, Guest, Photo
 
 SESSION_KEY = (
@@ -22,6 +24,31 @@ def _session_guest(request, event):
 def landing(request):
     """Public marketing home at the site root."""
     return render(request, "snap/landing.html")
+
+
+@require_POST
+def set_language(request):
+    """Persist the visitor's UI language in a cookie, then bounce back.
+
+    Works with no JavaScript: the header toggle is a tiny POST form. We only
+    redirect to same-site URLs so the `next` field can't be used for open
+    redirects.
+    """
+    lang = request.POST.get("lang", "en")
+    if lang not in SUPPORTED_LANGS:
+        lang = "en"
+
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        next_url = "/"
+
+    resp = HttpResponseRedirect(next_url)
+    resp.set_cookie(
+        LANG_COOKIE, lang, max_age=365 * 24 * 3600, samesite="Lax"
+    )
+    return resp
 
 
 @require_http_methods(["GET"])

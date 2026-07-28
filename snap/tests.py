@@ -411,6 +411,45 @@ class I18nTests(TestCase):
         r = self.client.get(reverse("snap:join", args=[ev.slug]))
         self.assertContains(r, 'dir="ltr"')
 
+    def test_default_language_is_english(self):
+        """With no cookie, the site opens in English regardless of past default."""
+        r = self.client.get(reverse("landing"))
+        self.assertContains(r, 'dir="ltr"')
+        self.assertContains(r, 'lang="en"')
+
+    def test_ui_lang_cookie_overrides_to_persian(self):
+        self.client.cookies["ui_lang"] = "fa"
+        r = self.client.get(reverse("landing"))
+        self.assertContains(r, 'dir="rtl"')
+        self.assertContains(r, 'lang="fa"')
+
+    def test_bogus_cookie_falls_back_to_default(self):
+        self.client.cookies["ui_lang"] = "xx"
+        r = self.client.get(reverse("landing"))
+        self.assertContains(r, 'lang="en"')
+
+    def test_set_language_sets_cookie_and_redirects(self):
+        r = self.client.post(
+            reverse("set_language"), {"lang": "fa", "next": "/events/"}
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, "/events/")
+        self.assertEqual(r.cookies["ui_lang"].value, "fa")
+
+    def test_set_language_rejects_offsite_next(self):
+        r = self.client.post(
+            reverse("set_language"), {"lang": "fa", "next": "https://evil.example/x"}
+        )
+        self.assertEqual(r.url, "/")
+
+    def test_set_language_ignores_unknown_lang(self):
+        r = self.client.post(reverse("set_language"), {"lang": "xx", "next": "/"})
+        self.assertEqual(r.cookies["ui_lang"].value, "en")
+
+    def test_set_language_get_not_allowed(self):
+        r = self.client.get(reverse("set_language"))
+        self.assertEqual(r.status_code, 405)
+
 
 class PublicPagesTests(TestCase):
     def test_landing_renders(self):

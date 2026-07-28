@@ -115,6 +115,19 @@
       text-transform:uppercase;
     }
 
+    /* --- Language toggle: floats top-inline-end, above the stage --- */
+    .app-lang { position:fixed; top:13px; inset-inline-end:15px; z-index:100; margin:0; }
+    .app-lang button {
+      width:auto; margin:0; padding:7px 13px; border-radius:100px;
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--safelight-dim); border:1px solid rgba(240,166,58,.28);
+      color:var(--safelight); font-family:var(--font-mono);
+      font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:none;
+    }
+    .app-lang button:hover { background:rgba(240,166,58,.26); }
+    .app-lang button svg { width:14px; height:14px; }
+    html[dir="rtl"] .app-lang button { letter-spacing:0; }
+
     /* --- Motion: the roll loads in. Edges slide from the sprockets, --- */
     /* --- the stage develops (fade + settle) just after.             --- */
     @keyframes edge-in { from { opacity:0; transform:scaleX(.4); } to { opacity:1; transform:none; } }
@@ -140,6 +153,14 @@
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+  <form method="post" action="{% url 'set_language' %}" class="app-lang">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <input type="hidden" name="lang" value="{% if lang == 'fa' %}en{% else %}fa{% endif %}">
+    <button type="submit" aria-label="{{ t.lang_switch_aria }}" title="{{ t.lang_switch_aria }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18" stroke-linecap="round"/></svg>{{ t.lang_switch }}
+    </button>
+  </form>
   {% block body %}{% endblock %}
 </body>
 </html>

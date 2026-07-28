@@ -8,6 +8,7 @@ from snap import views as snap_views
 urlpatterns = [
     path("", snap_views.landing, name="landing"),
     path("events/", snap_views.events, name="events"),
+    path("set-language/", snap_views.set_language, name="set_language"),
     path("admin/", admin.site.urls),
     path("e/", include("snap.urls")),
 ]

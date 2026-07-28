@@ -13,6 +13,9 @@ STRINGS = {
         "nav_how": "چطور کار می‌کند",
         "nav_events": "رویدادها",
         "nav_host": "میزبان شو",
+        # language toggle: shows the language you'd switch TO
+        "lang_switch": "EN",
+        "lang_switch_aria": "Switch to English",
         "lp_eyebrow": "دوربین یک‌بارمصرف رویداد",
         "lp_h1_a": "یک حلقه.",
         "lp_h1_b": "بدون تکرار.",
@@ -89,6 +92,9 @@ STRINGS = {
         "nav_how": "How it works",
         "nav_events": "Events",
         "nav_host": "Host",
+        # language toggle: shows the language you'd switch TO
+        "lang_switch": "فارسی",
+        "lang_switch_aria": "نمایش به فارسی",
         "lp_eyebrow": "The event disposable camera",
         "lp_h1_a": "One roll.",
         "lp_h1_b": "No retakes.",

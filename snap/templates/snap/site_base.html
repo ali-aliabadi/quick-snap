@@ -82,6 +82,21 @@
     .btn-amber { background:var(--amber); color:#fff; }
     .btn-amber:hover { filter:brightness(1.05); }
 
+    /* --- Language toggle (header) --- */
+    .lang-form { display:flex; margin:0; }
+    .lang-toggle {
+      display:inline-flex; align-items:center; gap:6px;
+      background:var(--amber-soft); border:1px solid rgba(217,138,34,.28);
+      color:var(--amber); border-radius:100px; padding:6px 13px;
+      font-family:var(--font-mono); font-size:.78rem; font-weight:700; letter-spacing:.04em;
+      cursor:pointer; transition:background .15s, border-color .15s, transform .08s;
+    }
+    .lang-toggle:hover { background:rgba(217,138,34,.2); border-color:var(--amber); }
+    .lang-toggle:active { transform:translateY(1px); }
+    .lang-toggle .globe { display:inline-flex; }
+    .lang-toggle .globe svg { width:15px; height:15px; }
+    html[dir="rtl"] .lang-toggle { letter-spacing:0; }
+
     /* --- Shared bits --- */
     .eyebrow, .kicker {
       font-family:var(--font-mono); font-size:.72rem; letter-spacing:.22em;
@@ -129,6 +144,16 @@
       <div class="nav-links">
         <a href="{% url 'landing' %}#how">{{ t.nav_how }}</a>
         <a href="{% url 'events' %}">{{ t.nav_events }}</a>
+        <form method="post" action="{% url 'set_language' %}" class="lang-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <input type="hidden" name="lang" value="{% if lang == 'fa' %}en{% else %}fa{% endif %}">
+          <button type="submit" class="lang-toggle" aria-label="{{ t.lang_switch_aria }}" title="{{ t.lang_switch_aria }}">
+            <span class="globe" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18" stroke-linecap="round"/></svg>
+            </span>{{ t.lang_switch }}
+          </button>
+        </form>
         <a class="btn btn-primary" href="{% url 'admin:index' %}">{{ t.nav_host }}</a>
       </div>
     </div>
