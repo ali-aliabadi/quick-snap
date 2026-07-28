@@ -355,6 +355,8 @@
       const dh = Math.max(1, Math.round(sh * scale));
       canvas.width = dw; canvas.height = dh;
       const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";  // sharper downscale from sensor res
       if (mirror) { ctx.translate(dw, 0); ctx.scale(-1, 1); }
       ctx.drawImage(source, 0, 0, dw, dh);
       return new Promise(r => canvas.toBlob(r, "image/jpeg", JPEG_Q));
@@ -428,7 +430,15 @@
       try {
         const blob = await grabBlob();
         setProgress(0);             // start of upload
-        const res = await uploadBlob(blob);
+
+        // One automatic retry on network blip or timeout.
+        let res;
+        try {
+          res = await uploadBlob(blob);
+        } catch (e) {
+          setProgress(null);        // indeterminate while retrying
+          res = await uploadBlob(blob);
+        }
 
         if (res.status === 409) { window.location = DONE_URL; return; }
         if (res.status === 403) {
