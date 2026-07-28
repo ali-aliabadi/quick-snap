@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
+from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -279,16 +280,11 @@ class CaptureViewTests(TestCase):
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["error"], "ended")
 
-    def test_email_flag_set_on_roll_full(self):
+    def test_no_email_flag_on_roll_full(self):
+        # Emails now go out when the event ends, not when the roll fills.
         self._join(self.client, email="a@x.com")
         self.client.post(self.cap, {"image": upload()})
         self.client.post(self.cap, {"image": upload()})  # fills roll
-        self.assertTrue(self.ev.guests.get().email_sent)
-
-    def test_no_email_flag_without_email(self):
-        self._join(self.client)  # no email
-        self.client.post(self.cap, {"image": upload()})
-        self.client.post(self.cap, {"image": upload()})
         self.assertFalse(self.ev.guests.get().email_sent)
 
 
@@ -324,6 +320,45 @@ class EmailTests(TestCase):
         g = Guest.objects.create(event=ev, name="Ann", email="a@x.com")
         _send(g)
         self.assertEqual(len(mail.outbox), 0)
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class SendEventEmailsCommandTests(TestCase):
+    def _ended_event_with_guest(self, email="a@x.com"):
+        ev = make_event(end_at=timezone.now() - timedelta(minutes=1))
+        g = Guest.objects.create(event=ev, name="Ann", email=email)
+        Photo.objects.create(guest=g, image=upload())
+        return ev, g
+
+    def test_emails_guests_of_ended_events(self):
+        ev, g = self._ended_event_with_guest()
+        call_command("send_event_emails")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["a@x.com"])
+        g.refresh_from_db()
+        self.assertTrue(g.email_sent)
+
+    def test_skips_guests_without_email(self):
+        ev = make_event(end_at=timezone.now() - timedelta(minutes=1))
+        g = Guest.objects.create(event=ev, name="Ann", email="")
+        Photo.objects.create(guest=g, image=upload())
+        call_command("send_event_emails")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_skips_events_not_yet_ended(self):
+        ev = make_event(end_at=timezone.now() + timedelta(hours=1))
+        g = Guest.objects.create(event=ev, name="Ann", email="a@x.com")
+        Photo.objects.create(guest=g, image=upload())
+        call_command("send_event_emails")
+        self.assertEqual(len(mail.outbox), 0)
+        g.refresh_from_db()
+        self.assertFalse(g.email_sent)
+
+    def test_does_not_resend_to_already_emailed(self):
+        ev, g = self._ended_event_with_guest()
+        call_command("send_event_emails")
+        call_command("send_event_emails")  # second run
+        self.assertEqual(len(mail.outbox), 1)
 
 
 # --------------------------------------------------------------------------- #

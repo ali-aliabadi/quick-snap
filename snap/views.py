@@ -3,7 +3,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .emails import send_roll_email
 from .models import Event, Guest, Photo
 
 SESSION_KEY = (
@@ -126,12 +125,8 @@ def capture(request, slug):
 
     remaining = guest.remaining
     done = remaining == 0
-    if done and guest.email and not guest.email_sent:
-        # Flag first (guards duplicates), then send in a background thread.
-        guest.email_sent = True
-        guest.save(update_fields=["email_sent"])
-        send_roll_email(guest)
-
+    # Emails are sent when the event ends (see the send_event_emails command),
+    # not when the roll fills — a guest may still have photos to take.
     return JsonResponse({"remaining": remaining, "done": done})
 
 
