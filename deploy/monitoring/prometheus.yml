@@ -14,6 +14,11 @@ global:
   external_labels:
     host: german-vps
 
+# Alert rules live in their own file so promtool can validate them
+# independently. See deploy/monitoring/alerts.yml.
+rule_files:
+  - /etc/prometheus/alerts.yml
+
 scrape_configs:
   - job_name: quicksnap
     # Scrape the app directly over the compose network. Do NOT use

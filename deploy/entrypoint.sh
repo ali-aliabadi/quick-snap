@@ -14,4 +14,8 @@ fi
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
+# Table backing the failed-join throttle's cache. Idempotent, so it is safe on
+# every boot; without it the first throttled request would 500.
+python manage.py createcachetable
+
 exec "$@"

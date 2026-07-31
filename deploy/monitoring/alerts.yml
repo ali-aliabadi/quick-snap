@@ -1,0 +1,133 @@
+# Alert rules for the Quick Snap VPS.
+#
+# Scoped to things that would actually cost you photos or a working site during
+# an event. Every rule carries a `for:` delay so a single scrape blip doesn't
+# page you, and the annotations say what to *do*, not just what broke.
+#
+# These are evaluated by Prometheus and surface in Grafana under
+# Alerting -> Alert rules (the Prometheus datasource is queried directly).
+
+groups:
+  - name: quicksnap-critical
+    interval: 30s
+    rules:
+      # The one that actually loses photos: uploads fail once the disk is full,
+      # and a guest's roll is gone for good. 10% of 44G is ~4.4G — with photos
+      # at roughly 2-3MB that is still well over a thousand frames of headroom,
+      # which is enough warning to act mid-event.
+      - alert: DiskAlmostFull
+        expr: |
+          1 - (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs"}
+          ) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $value | humanizePercentage }} full on {{ $labels.instance }}"
+          description: >-
+            Photo uploads fail when the disk fills, and a guest's roll cannot be
+            recovered. Free space now: clear old media, or move storage to S3
+            (USE_S3=True).
+
+      # The app is unreachable to the scraper. If this fires during an event,
+      # guests are seeing errors instead of a camera.
+      - alert: QuickSnapDown
+        expr: up{job="quicksnap"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Quick Snap app is not responding to scrapes"
+          description: >-
+            The web container is down, wedged, or its /metrics token is wrong.
+            Check `docker compose -f docker-compose.prod.yml ps` and the web logs.
+
+      # Photos are being taken but a meaningful share are failing. Deliberately
+      # a *ratio*, not a count: one failure is noise, a fifth of them failing is
+      # a broken event. Gated refusals are excluded — those are normal.
+      - alert: CaptureFailureRate
+        expr: |
+          sum(rate(quicksnap_capture_errors_total[10m]))
+          / clamp_min(
+              sum(rate(quicksnap_photos_captured_total[10m]))
+              + sum(rate(quicksnap_capture_errors_total[10m])),
+              0.001
+            ) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of captures are failing"
+          description: >-
+            Guests are tapping the shutter and not getting their photo saved.
+            Check the web container logs and disk space.
+
+  - name: quicksnap-warning
+    interval: 60s
+    rules:
+      # Left to run, this ends as DiskAlmostFull. Fires early enough to fix
+      # calmly rather than during a party.
+      - alert: DiskFillingUp
+        expr: |
+          1 - (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="rootfs"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!="rootfs"}
+          ) > 0.80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk {{ $value | humanizePercentage }} full"
+          description: "Plan cleanup before the next event."
+
+      # Memory pressure on a 5.7G box shared with eid_web and v2ray. The OOM
+      # killer picking the web container mid-event is the failure mode here.
+      - alert: MemoryPressure
+        expr: |
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory {{ $value | humanizePercentage }} used"
+          description: >-
+            Risk of the OOM killer stopping a container. Check which service is
+            responsible on the Containers row of the dashboard.
+
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(quicksnap_http_requests_total{status="5xx"}[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Server errors on the guest-facing app"
+          description: "Sustained 5xx responses — check the web container logs."
+
+      # Sustained load on 3 cores. Not itself an outage, but it makes uploads
+      # crawl, and slow uploads at a party read as a broken app.
+      - alert: SustainedHighLoad
+        expr: node_load5 > 6
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Load average {{ $value | printf \"%.1f\" }} on 3 cores"
+          description: >-
+            Uploads will feel slow. Check the Containers row to see whether it is
+            Quick Snap or a neighbouring service.
+
+      # The failed-join throttle is tripping. Either someone is guessing the
+      # event password, or the password on the table cards is wrong.
+      - alert: JoinThrottleTripping
+        expr: sum(rate(quicksnap_joins_total{result="throttled"}[10m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Guests are being throttled at the join form"
+          description: >-
+            Either a brute-force attempt, or the printed password does not match
+            the event — check with the host before guests give up.

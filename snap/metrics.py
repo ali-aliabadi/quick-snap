@@ -53,8 +53,18 @@ photos_captured = Counter(
 
 capture_errors = Counter(
     "quicksnap_capture_errors_total",
-    "Capture attempts rejected, by reason "
-    "(not_joined, not_started, ended, closed, no_image, roll_full).",
+    "Capture attempts that genuinely failed, by reason (not_joined, no_image).",
+    ["reason"],
+)
+
+# Rejections that are the app working *correctly*: the roll is finished, or the
+# event's time window is closed. Kept separate from capture_errors so a healthy
+# event full of guests finishing their rolls doesn't look like an outage on the
+# dashboard — and so the success-rate gauge isn't dragged down by normal gating.
+capture_gated = Counter(
+    "quicksnap_capture_gated_total",
+    "Capture attempts refused by design, by reason "
+    "(roll_full, not_started, ended, closed).",
     ["reason"],
 )
 
@@ -76,7 +86,7 @@ upload_bytes = Histogram(
 
 joins = Counter(
     "quicksnap_joins_total",
-    "Join attempts by outcome (created, resumed, rejected).",
+    "Join attempts by outcome (created, resumed, rejected, throttled).",
     ["result"],
 )
 

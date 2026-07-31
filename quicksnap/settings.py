@@ -91,6 +91,20 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# --- Cache: backs the failed-join throttle (snap/throttle.py) ---
+# This has to be shared across processes. The default LocMemCache is per-process,
+# so with 3 gunicorn workers each would see only its own third of the failures
+# and the throttle would be ~3x looser than configured. The database backend is
+# shared, needs no extra service, and its table is created on boot by
+# deploy/entrypoint.sh. Writes are tiny and only happen on failures.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "quicksnap_cache",
+        "OPTIONS": {"MAX_ENTRIES": 5000, "CULL_FREQUENCY": 3},
+    }
+}
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = env("TIME_ZONE", default="UTC")
 USE_I18N = True

@@ -294,7 +294,7 @@
     {
       "type": "gauge",
       "title": "Upload success",
-      "description": "Accepted photos as a share of real attempts. roll_full and not_started are excluded \u2014 they are the app working correctly, not failures.",
+      "description": "Accepted photos as a share of real attempts. Normal gating (finished rolls, closed window) is counted in quicksnap_capture_gated_total and deliberately excluded here.",
       "id": 6,
       "datasource": {
         "type": "prometheus",
@@ -354,7 +354,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(quicksnap_photos_captured_total[15m])) / clamp_min(sum(rate(quicksnap_photos_captured_total[15m])) + sum(rate(quicksnap_capture_errors_total{reason!~\"roll_full|not_started\"}[15m])), 0.0001)",
+          "expr": "sum(rate(quicksnap_photos_captured_total[15m])) / clamp_min(sum(rate(quicksnap_photos_captured_total[15m])) + sum(rate(quicksnap_capture_errors_total[15m])), 0.0001)",
           "range": true,
           "instant": false,
           "refId": "E"
@@ -478,8 +478,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Capture rejections by reason",
-      "description": "Stacked because the question is part-to-whole: which reason dominates. roll_full and not_started are normal gating, not errors.",
+      "title": "Capture failures by reason",
+      "description": "Genuine failures only \u2014 anything here is worth investigating. Expected refusals (roll finished, event closed) are in the panel beside this.",
       "id": 9,
       "datasource": {
         "type": "prometheus",
@@ -487,7 +487,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
+        "w": 6,
         "x": 12,
         "y": 7
       },
@@ -552,36 +552,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "ended"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#c98500"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "closed"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#ec835a"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "no_image"
             },
             "properties": [
@@ -590,36 +560,6 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#d03b3b"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "roll_full"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#008300"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "not_started"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
                 }
               }
             ]
@@ -650,6 +590,153 @@
           "instant": false,
           "refId": "G",
           "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Expected refusals (normal)",
+      "description": "Rolls finishing and time-window gating. Healthy activity \u2014 roll_full rising late in an event is guests using their last frames.",
+      "id": 29,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 18,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "pointSize": 5,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "axisSoftMin": 0,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "barAlignment": 0,
+            "barWidthFactor": 0.8,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "roll_full"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#008300"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ended"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "closed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "not_started"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(quicksnap_capture_gated_total[$__rate_interval])) * 60",
+          "legendFormat": "{{reason}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ]
     },
@@ -1231,7 +1318,7 @@
     {
       "type": "timeseries",
       "title": "Join outcomes",
-      "description": "'resumed' means a guest re-entered their number and picked their roll back up.",
+      "description": "'resumed' means a guest re-entered their number and picked their roll back up. 'throttled' means the failed-join limit kicked in.",
       "id": 16,
       "datasource": {
         "type": "prometheus",
@@ -1327,6 +1414,21 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#d03b3b"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "throttled"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#ec835a"
                 }
               }
             ]

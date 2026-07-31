@@ -52,6 +52,7 @@ services:
     env_file: .env
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       # Bearer token for the app scrape. Prometheus does not expand env vars in
       # its config, so deploy.sh materialises this file from METRICS_TOKEN.
       - ./deploy/monitoring/.metrics_token:/etc/prometheus/metrics_token:ro

@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
+from . import throttle
 from .i18n import get_strings
 from .models import Event, Guest, Photo
 from .phones import normalize_phone
@@ -697,6 +698,191 @@ class MetricsEndpointTests(TestCase):
         self.assertEqual(r.status_code, 200)
         # The event counters still made it out even though the gauges bailed.
         self.assertIn("quicksnap_http_requests_total", r.content.decode())
+
+
+@override_settings(METRICS_TOKEN="test-token")
+class CaptureOutcomeMetricTests(TestCase):
+    """Normal gating must not be counted as failure.
+
+    A healthy event ends with every guest's roll full; if that lands in the error
+    metric, the dashboard shows a spike of "errors" exactly when things went
+    best, and the success-rate gauge sags for no reason.
+    """
+
+    @staticmethod
+    def _value(name, labels):
+        from prometheus_client import REGISTRY
+
+        return REGISTRY.get_sample_value(name, labels) or 0.0
+
+    def test_roll_full_is_gated_not_an_error(self):
+        ev = make_event(password="pw", roll_size=1)
+        join = reverse("snap:join", args=[ev.slug])
+        cap = reverse("snap:capture", args=[ev.slug])
+        before_gated = self._value(
+            "quicksnap_capture_gated_total", {"reason": "roll_full"}
+        )
+        before_err = self._value(
+            "quicksnap_capture_errors_total", {"reason": "roll_full"}
+        )
+
+        self.client.post(
+            join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
+        self.client.post(cap, {"image": upload()})  # fills the roll
+        r = self.client.post(cap, {"image": upload()})  # one past the cap
+        self.assertEqual(r.status_code, 409)
+
+        self.assertEqual(
+            self._value("quicksnap_capture_gated_total", {"reason": "roll_full"})
+            - before_gated,
+            1.0,
+        )
+        # And it must NOT have gone anywhere near the error counter.
+        self.assertEqual(
+            self._value("quicksnap_capture_errors_total", {"reason": "roll_full"}),
+            before_err,
+        )
+
+    def test_time_window_gating_is_not_an_error(self):
+        ev = make_event(password="pw")
+        join = reverse("snap:join", args=[ev.slug])
+        cap = reverse("snap:capture", args=[ev.slug])
+        self.client.post(
+            join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
+        before = self._value("quicksnap_capture_gated_total", {"reason": "ended"})
+
+        ev.end_at = timezone.now() - timedelta(minutes=1)
+        ev.save()
+        self.assertEqual(self.client.post(cap, {"image": upload()}).status_code, 403)
+
+        self.assertEqual(
+            self._value("quicksnap_capture_gated_total", {"reason": "ended"}) - before,
+            1.0,
+        )
+
+    def test_real_failures_still_count_as_errors(self):
+        ev = make_event(password="pw")
+        cap = reverse("snap:capture", args=[ev.slug])
+        before = self._value("quicksnap_capture_errors_total", {"reason": "not_joined"})
+        Client().post(cap, {"image": upload()})
+        self.assertEqual(
+            self._value("quicksnap_capture_errors_total", {"reason": "not_joined"})
+            - before,
+            1.0,
+        )
+
+
+class JoinThrottleTests(TestCase):
+    """Each password check costs a PBKDF2 hash (~80ms), so an unthrottled join
+    form is both a guessing oracle and a cheap way to saturate a 3-core VPS."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()  # throttle state is global; don't leak between tests
+        self.ev = make_event(password="pw")
+        self.url = reverse("snap:join", args=[self.ev.slug])
+
+    def _fail(self, client=None):
+        c = client or self.client
+        return c.post(
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "wrong"}
+        )
+
+    def test_failures_eventually_return_429(self):
+        for _ in range(throttle.MAX_FAILURES):
+            self._fail()
+        self.assertEqual(self._fail().status_code, 429)
+
+    def test_limit_is_loose_enough_for_a_confused_table(self):
+        """All guests at a venue share one NAT/Cloudflare IP, so the limit has to
+        tolerate several people fumbling before it bites."""
+        for _ in range(throttle.MAX_FAILURES - 1):
+            self.assertEqual(self._fail().status_code, 400)
+
+    def test_a_successful_join_clears_the_count(self):
+        """One guest mistyping must not leave their whole table near the limit."""
+        for _ in range(throttle.MAX_FAILURES - 1):
+            self._fail()
+        r = self.client.post(
+            self.url, {"name": "Bob", "phone": "09120000002", "password": "pw"}
+        )
+        self.assertEqual(r.status_code, 302)
+        # Counter reset, so a later mistake is an ordinary 400 again.
+        self.assertEqual(self._fail(Client()).status_code, 400)
+
+    def test_throttle_is_per_event(self):
+        """Hammering one event must not lock guests out of a different one."""
+        other = make_event(slug="other", name="Other", password="pw2")
+        for _ in range(throttle.MAX_FAILURES + 1):
+            self._fail()
+        r = self.client.post(
+            reverse("snap:join", args=[other.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw2"},
+        )
+        self.assertEqual(r.status_code, 302)
+
+    def test_throttle_is_per_ip(self):
+        blocked = Client(REMOTE_ADDR="10.0.0.1")
+        for _ in range(throttle.MAX_FAILURES + 1):
+            blocked.post(
+                self.url,
+                {"name": "Ann", "phone": "09123456789", "password": "wrong"},
+            )
+        # A different guest on a different IP is unaffected.
+        other = Client(REMOTE_ADDR="10.0.0.2")
+        r = other.post(
+            self.url, {"name": "Bob", "phone": "09120000002", "password": "pw"}
+        )
+        self.assertEqual(r.status_code, 302)
+
+    def test_blocked_client_never_pays_for_a_hash(self):
+        """The whole point is skipping the expensive check, so assert we never
+        reach it while blocked."""
+        for _ in range(throttle.MAX_FAILURES):
+            self._fail()
+        with mock.patch.object(
+            Event, "check_password", side_effect=AssertionError("should not hash")
+        ):
+            self.assertEqual(self._fail().status_code, 429)
+
+    def test_cf_connecting_ip_is_preferred(self):
+        """Behind Cloudflare + nginx, REMOTE_ADDR is nginx and X-Real-IP is
+        Cloudflare's edge — only CF-Connecting-IP identifies the visitor."""
+        req = mock.Mock()
+        req.META = {
+            "HTTP_CF_CONNECTING_IP": "203.0.113.9",
+            "HTTP_X_FORWARDED_FOR": "198.51.100.1, 203.0.113.9",
+            "REMOTE_ADDR": "172.18.0.1",
+        }
+        self.assertEqual(throttle.client_ip(req), "203.0.113.9")
+
+    def test_falls_back_through_xff_then_remote_addr(self):
+        req = mock.Mock()
+        req.META = {
+            "HTTP_X_FORWARDED_FOR": "198.51.100.7, 10.0.0.1",
+            "REMOTE_ADDR": "172.18.0.1",
+        }
+        self.assertEqual(throttle.client_ip(req), "198.51.100.7")
+        req.META = {"REMOTE_ADDR": "172.18.0.1"}
+        self.assertEqual(throttle.client_ip(req), "172.18.0.1")
+
+    def test_throttled_joins_are_counted(self):
+        from prometheus_client import REGISTRY
+
+        before = (
+            REGISTRY.get_sample_value("quicksnap_joins_total", {"result": "throttled"})
+            or 0.0
+        )
+        for _ in range(throttle.MAX_FAILURES + 1):
+            self._fail()
+        after = (
+            REGISTRY.get_sample_value("quicksnap_joins_total", {"result": "throttled"})
+            or 0.0
+        )
+        self.assertGreaterEqual(after - before, 1.0)
 
 
 class DashboardTests(TestCase):

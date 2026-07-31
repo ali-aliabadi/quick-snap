@@ -8,9 +8,16 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
+from . import throttle
 from .context_processors import LANG_COOKIE, SUPPORTED_LANGS
 from .i18n import get_strings
-from .metrics import capture_errors, joins, photos_captured, upload_bytes
+from .metrics import (
+    capture_errors,
+    capture_gated,
+    joins,
+    photos_captured,
+    upload_bytes,
+)
 from .models import Event, Guest, Photo
 from .phones import normalize_phone
 
@@ -151,6 +158,25 @@ def join(request, slug):
         phone_raw = request.POST.get("phone", "").strip()
 
         t = _t(request)
+
+        # Checked before anything else, and crucially before check_password():
+        # the PBKDF2 hash is the expensive part we're protecting, so a blocked
+        # client must be turned away without paying for it.
+        if throttle.is_blocked(request, event):
+            joins.labels(result="throttled").inc()
+            return render(
+                request,
+                "snap/join.html",
+                _join_context(
+                    request,
+                    event,
+                    errors=[t["err_too_many"]],
+                    name=name,
+                    phone=phone_raw,
+                ),
+                status=429,
+            )
+
         errors = []
         if not event.is_active or event.has_ended:
             errors.append(t["err_event_closed"])
@@ -167,6 +193,10 @@ def join(request, slug):
 
         if errors:
             joins.labels(result="rejected").inc()
+            # Count it, and if this failure trips the limit say so immediately
+            # rather than letting the next attempt deliver the news.
+            if throttle.record_failure(request, event):
+                errors = [t["err_too_many"]]
             return render(
                 request,
                 "snap/join.html",
@@ -175,6 +205,10 @@ def join(request, slug):
                 ),
                 status=400,
             )
+
+        # Success: forget this client's earlier fumbles, so a shared venue IP
+        # doesn't accumulate strikes across a whole table of guests.
+        throttle.clear(request, event)
 
         # Resume an existing roll (same phone) or start a fresh one.
         guest, _created = Guest.objects.get_or_create(
@@ -217,14 +251,15 @@ def capture(request, slug):
         capture_errors.labels(reason="not_joined").inc()
         return JsonResponse({"error": "not_joined"}, status=403)
 
-    # Time window + active gate (never trust the client).
+    # Time window + active gate (never trust the client). Gating is the app
+    # working correctly, so it is counted separately from real errors.
     if not event.is_open:
         reason = (
             "ended"
             if event.has_ended
             else ("not_started" if not event.has_started else "closed")
         )
-        capture_errors.labels(reason=reason).inc()
+        capture_gated.labels(reason=reason).inc()
         return JsonResponse({"error": reason}, status=403)
 
     image = request.FILES.get("image")
@@ -239,7 +274,8 @@ def capture(request, slug):
     with transaction.atomic():
         locked = Guest.objects.select_for_update().get(pk=guest.pk)
         if locked.roll_full:
-            capture_errors.labels(reason="roll_full").inc()
+            # A guest finishing their roll is the expected end state, not a fault.
+            capture_gated.labels(reason="roll_full").inc()
             return JsonResponse({"remaining": 0, "done": True}, status=409)
         Photo.objects.create(guest=locked, image=image)
         remaining = locked.remaining

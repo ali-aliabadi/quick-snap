@@ -616,6 +616,7 @@
     let videoInputs = [];      // cached; only meaningful after a successful gUM
     let deviceIdx = -1;        // position in videoInputs when cycling by id
     let useDeviceCycle = false; // true once we know facingMode is meaningless
+    let activeDeviceId = null; // camera on screen now, so a restart can restore it
 
     async function tryGum(videoConstraints) {
       try {
@@ -692,9 +693,12 @@
       applyMirror();
 
       await refreshDevices();
-      // Keep the cycle index pointing at whatever we're actually showing.
+      // Keep the cycle index pointing at whatever we're actually showing, and
+      // remember the id so a restart (iOS kills the stream on background) can
+      // come back on the *same* camera instead of reverting to the default.
       const nowId = track.getSettings ? track.getSettings().deviceId : null;
       if (nowId) {
+        activeDeviceId = nowId;
         const i = videoInputs.findIndex(d => d.deviceId === nowId);
         if (i >= 0) deviceIdx = i;
       }
@@ -893,18 +897,31 @@
     }
 
     /* Cancel. The roll is only decremented when the server commits the photo,
-       so aborting mid-flight costs the guest nothing — the exposure is still
-       theirs to use. Flagged so the retry path doesn't fight the abort. */
+       so aborting costs the guest nothing — the exposure is still theirs.
+
+       The flag matters as much as the abort: the overlay goes up *before* any
+       XHR exists (takePhoto() can spend up to TAKEPHOTO_MS, then a 4K JPEG
+       encode), so for the first moments there is nothing to abort. Setting the
+       flag makes those phases bail at their next checkpoint, so the button
+       always does something rather than looking enabled and ignoring taps. */
     let cancelled = false;
 
     function cancelUpload() {
-      if (!activeXhr) return;
+      if (cancelled) return;
       cancelled = true;
       cancelBtn.disabled = true;
-      activeXhr.abort();
+      // Abort if bytes are already moving; otherwise the checkpoints below
+      // (in takePhoto / usePickedFile / submitBlob) pick it up.
+      if (activeXhr) activeXhr.abort();
     }
 
     cancelBtn.addEventListener("click", cancelUpload);
+
+    /* Throw at a phase boundary if the guest hit Cancel. Same Error message the
+       XHR abort produces, so every caller can treat cancels uniformly. */
+    function abortIfCancelled() {
+      if (cancelled) throw new Error("aborted");
+    }
 
     function setBusy(on) {
       busy = on;
@@ -915,6 +932,7 @@
     /* Upload one blob and reconcile the roll counter. Shared by the live
        shutter and the gallery picker so both consume the same roll. */
     async function submitBlob(blob) {
+      abortIfCancelled();         // cancelled while we were encoding
       setProgress(0);             // start of upload
       etaReset();
 
@@ -960,7 +978,9 @@
       sending.classList.add("show");
 
       try {
-        await submitBlob(await grabBlob());
+        const blob = await grabBlob();
+        abortIfCancelled();     // cancelled during takePhoto()/encode
+        await submitBlob(blob);
       } catch (e) {
         // A cancel is the guest's own decision — tell them plainly that the
         // photo wasn't saved, rather than implying something broke.
@@ -1029,6 +1049,7 @@
       let decoded = null;
       try {
         decoded = await decodeImage(file);
+        abortIfCancelled();   // decoding a large HEIC/JPEG is slow enough to cancel during
         // No mirror and no crop: a gallery photo is already framed as the
         // guest wants it — the live preview's zoom has nothing to do with it.
         const blob = await encode(decoded.src, decoded.w, decoded.h, false, 1);
@@ -1051,14 +1072,21 @@
     switchBtn.addEventListener("click", flipCamera);
     document.getElementById("overlay-retry").addEventListener("click", () => {
       if (overlayKind === "upload") { overlay.classList.remove("show"); return; }
-      startCamera();
+      restartCamera();
     });
+
+    /* Rebuild the stream on the camera the guest was actually using.
+       Bare startCamera() re-runs the acquisition ladder from the top, which on
+       a deviceId-cycled camera silently lands back on the default one — so
+       backgrounding the app could flip you from the back camera to the front
+       mid-roll. Passing the remembered id keeps that from happening. */
+    function restartCamera() { return startCamera(activeDeviceId || undefined); }
 
     /* Backgrounding the tab suspends the camera on iOS and the preview comes
        back frozen. If the track died while we were away, rebuild the stream. */
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible" || busy) return;
-      if (!stream || !track || track.readyState === "ended") { startCamera(); return; }
+      if (!stream || !track || track.readyState === "ended") { restartCamera(); return; }
       video.play().catch(() => { /* nothing more we can do */ });
     });
 
@@ -1069,7 +1097,7 @@
        which case rebuild the whole stream instead. */
     video.addEventListener("pause", () => {
       if (document.visibilityState !== "visible") return;   // legitimately backgrounded
-      if (!track || track.readyState === "ended") { startCamera(); return; }
+      if (!track || track.readyState === "ended") { restartCamera(); return; }
       video.play().catch(() => {});
     });
 
