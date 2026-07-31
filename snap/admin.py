@@ -1,3 +1,4 @@
+import os
 import zipfile
 from io import BytesIO
 
@@ -81,7 +82,11 @@ def download_all_photos(modeladmin, request, queryset):
                         data = photo.image.read()
                     finally:
                         photo.image.close()
-                    zf.writestr(f"{event.slug}/{folder}/{i:03d}.jpg", data)
+                    # Keep the stored file's real extension. Phones that can
+                    # encode WebP upload .webp, and labelling those .jpg gives
+                    # the host files some viewers refuse to open.
+                    ext = os.path.splitext(photo.image.name)[1].lstrip(".").lower()
+                    zf.writestr(f"{event.slug}/{folder}/{i:03d}.{ext or 'jpg'}", data)
     buffer.seek(0)
     resp = HttpResponse(buffer.getvalue(), content_type="application/zip")
     resp["Content-Disposition"] = 'attachment; filename="quicksnap_photos.zip"'

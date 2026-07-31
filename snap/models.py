@@ -6,7 +6,11 @@ from django.utils import timezone
 
 
 def photo_upload_path(instance, filename):
-    """media/<event-slug>/<guest-token>/<uuid>.jpg — groups by event then guest."""
+    """media/<event-slug>/<guest-token>/<uuid>.<ext> — groups by event then guest.
+
+    The extension follows the upload: phones that can encode WebP send .webp,
+    the rest send .jpg (see detectEncodeFormat in camera.html).
+    """
     ext = (filename.rsplit(".", 1)[-1] or "jpg").lower()
     return (
         f"{instance.guest.event.slug}/{instance.guest.token}/{uuid.uuid4().hex}.{ext}"

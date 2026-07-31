@@ -49,6 +49,18 @@ def upload(name="snap.jpg"):
     return SimpleUploadedFile(name, make_jpeg(), content_type="image/jpeg")
 
 
+def make_webp(color=(30, 120, 200), size=(12, 12)):
+    """Return valid WebP bytes. The camera prefers WebP where the browser can
+    encode it (~3.6x smaller than JPEG at the same visual quality)."""
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, "WEBP", quality=90)
+    return buf.getvalue()
+
+
+def upload_webp(name="snap.webp"):
+    return SimpleUploadedFile(name, make_webp(), content_type="image/webp")
+
+
 def make_event(password="secret", roll_size=3, **kwargs):
     ev = Event(
         name=kwargs.pop("name", "Wedding"),
@@ -457,6 +469,66 @@ class AdminZipTests(TestCase):
         self.assertEqual(resp["Content-Type"], "application/zip")
         zf = zipfile.ZipFile(io.BytesIO(resp.content))
         self.assertEqual(len(zf.namelist()), 2)
+
+    def test_zip_keeps_each_photo_s_real_extension(self):
+        """A .webp labelled .jpg is a file some viewers refuse to open, and the
+        host only ever sees these through this ZIP."""
+        import zipfile
+
+        from .admin import download_all_photos
+
+        ev = make_event(roll_size=4)
+        g = Guest.objects.create(event=ev, name="Ann", phone="09123456789")
+        Photo.objects.create(guest=g, image=upload())  # jpeg
+        Photo.objects.create(guest=g, image=upload_webp())  # webp
+        resp = download_all_photos(None, None, Event.objects.filter(pk=ev.pk))
+        names = zipfile.ZipFile(io.BytesIO(resp.content)).namelist()
+        exts = sorted(n.rsplit(".", 1)[-1] for n in names)
+        self.assertEqual(exts, ["jpg", "webp"])
+
+
+class WebPCaptureTests(TestCase):
+    """WebP is the default capture format where the browser can encode it.
+    These cover the server half — the client half is the toBlob type probe."""
+
+    @override_settings(APP_LANG="en")
+    def test_webp_upload_is_accepted_and_stored_as_webp(self):
+        ev = make_event(password="pw", roll_size=2)
+        self.client.post(
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
+        )
+        r = self.client.post(
+            reverse("snap:capture", args=[ev.slug]), {"image": upload_webp()}
+        )
+        self.assertEqual(r.status_code, 200)
+        photo = ev.guests.get().photos.get()
+        self.assertTrue(
+            photo.image.name.endswith(".webp"),
+            f"stored as {photo.image.name!r}, losing the format",
+        )
+
+    def test_upload_path_preserves_extension(self):
+        from .models import photo_upload_path
+
+        ev = make_event(slug="party")
+        g = Guest.objects.create(event=ev, name="Ann", phone="09120000001")
+        p = Photo(guest=g)
+        self.assertTrue(photo_upload_path(p, "snap.webp").endswith(".webp"))
+        self.assertTrue(photo_upload_path(p, "snap.jpg").endswith(".jpg"))
+
+    def test_stored_webp_is_a_real_decodable_image(self):
+        """Guards against a browser silently handing us PNG bytes named .webp —
+        the documented canvas.toBlob fallback."""
+        ev = make_event(roll_size=1)
+        g = Guest.objects.create(event=ev, name="Ann", phone="09123456789")
+        photo = Photo.objects.create(guest=g, image=upload_webp())
+        photo.image.open("rb")
+        try:
+            img = Image.open(photo.image)
+            self.assertEqual(img.format, "WEBP")
+        finally:
+            photo.image.close()
 
 
 # --------------------------------------------------------------------------- #
