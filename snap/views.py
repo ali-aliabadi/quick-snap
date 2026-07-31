@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -115,7 +116,8 @@ def join(request, slug):
         if not phone:
             errors.append(t["err_phone_invalid"])
 
-        if not event.check_password(password):
+        # Open events (no password set) accept anyone with the link.
+        if event.requires_password and not event.check_password(password):
             errors.append(t["err_wrong_password"])
 
         if errors:
@@ -176,23 +178,43 @@ def capture(request, slug):
         )
         return JsonResponse({"error": reason}, status=403)
 
-    # Server-side roll cap — never trust the client counter.
-    if guest.roll_full:
-        return JsonResponse({"remaining": 0, "done": True}, status=409)
-
     image = request.FILES.get("image")
     if not image:
         return JsonResponse({"error": "no_image"}, status=400)
 
-    Photo.objects.create(guest=guest, image=image)
+    # Server-side roll cap — never trust the client counter. Locking the guest
+    # row makes the check-then-insert atomic: two uploads racing (double tap,
+    # or a snap and a gallery pick in flight together) can't both slip past a
+    # roll_size-1 count and overshoot the roll.
+    with transaction.atomic():
+        locked = Guest.objects.select_for_update().get(pk=guest.pk)
+        if locked.roll_full:
+            return JsonResponse({"remaining": 0, "done": True}, status=409)
+        Photo.objects.create(guest=locked, image=image)
+        remaining = locked.remaining
 
-    remaining = guest.remaining
-    done = remaining == 0
-    return JsonResponse({"remaining": remaining, "done": done})
+    return JsonResponse({"remaining": remaining, "done": remaining == 0})
 
 
 @require_http_methods(["GET"])
 def done(request, slug):
     event = get_object_or_404(Event, slug=slug)
     guest = _session_guest(request, event)
-    return render(request, "snap/done.html", {"event": event, "guest": guest})
+    t = _t(request)
+
+    # Persian word order won't survive being split into pre/post fragments
+    # around the number, so the copy is one string with {n}/{event} holes and
+    # we fill them here — Django templates can't do string replace.
+    taken = guest.taken if guest else 0
+    ctx = {
+        "event": event,
+        "guest": guest,
+        "done_frames": t["done_frames"]
+        .replace("{n}", str(taken))
+        .replace("{event}", event.name),
+        "done_thanks": t["done_thanks"].replace("{event}", event.name),
+        # One lit frame per photo, staggered. Capped so a 40-photo roll doesn't
+        # turn into a wall of blinking squares.
+        "photo_slots": [600 + i * 45 for i in range(min(taken, 12))],
+    }
+    return render(request, "snap/done.html", ctx)

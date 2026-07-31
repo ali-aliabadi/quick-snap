@@ -1,47 +1,81 @@
 {% extends "snap/base.html" %}
-{% block title %}{{ event.name }} — Quick Snap{% endblock %}
+{% block title %}{{ event.name }} — {{ t.site_name }}{% endblock %}
 {% block head %}
 <style>
-  .welcome-box { background:rgba(240,166,58,.08); border:1px solid rgba(240,166,58,.22);
-    border-radius:4px; padding:18px 20px; margin:20px 0; }
-  .welcome-box h2 { font-family:var(--font-display); font-size:1.4rem; margin:0 0 8px;
-    color:var(--ivory); font-weight:500; }
-  .welcome-box p { color:var(--muted); font-size:.92rem; line-height:1.5; margin:0; }
-  .steps { margin:22px 0; }
-  .steps h3 { font-family:var(--font-mono); font-size:.72rem; letter-spacing:.24em;
-    text-transform:uppercase; color:var(--safelight); margin:0 0 14px; }
+  /* Mobile-first: slim vertical at 360px, comfortable at tablet+ */
+  .welcome-hero {
+    text-align:center; padding:28px 0 20px; animation:rise .7s cubic-bezier(.2,.7,.2,1) .1s both;
+  }
+  @keyframes rise { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:none; } }
+  .welcome-hero h1 { font-size:clamp(2rem,7vw,2.8rem); margin:0 0 12px; }
+  .welcome-card {
+    background:rgba(240,166,58,.08); border:1px solid rgba(240,166,58,.22);
+    border-radius:8px; padding:18px 20px; margin:20px 0;
+    animation:card-glow .8s cubic-bezier(.2,.7,.2,1) .25s both;
+  }
+  @keyframes card-glow {
+    from { opacity:0; box-shadow:0 0 0 rgba(240,166,58,0); }
+    to { opacity:1; box-shadow:0 0 18px -6px rgba(240,166,58,.28); }
+  }
+  .welcome-card h2 {
+    font-family:var(--font-display); font-size:1.22rem; margin:0 0 8px;
+    color:var(--ivory); font-weight:500; line-height:1.38;
+  }
+  .welcome-card p { color:var(--muted); font-size:.92rem; line-height:1.55; margin:0; }
+  .steps { margin:22px 0; animation:rise .7s cubic-bezier(.2,.7,.2,1) .35s both; }
+  .steps h3 {
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--safelight); margin:0 0 14px;
+  }
   .steps ol { list-style:none; padding:0; margin:0; counter-reset:step; }
-  .steps li { counter-increment:step; position:relative; padding-left:38px; margin-bottom:12px;
-    color:var(--muted); font-size:.88rem; line-height:1.5; }
-  .steps li::before { content:counter(step); position:absolute; left:0; top:0;
+  .steps li {
+    counter-increment:step; position:relative; padding-left:38px; margin-bottom:12px;
+    color:var(--muted); font-size:.88rem; line-height:1.5;
+  }
+  .steps li::before {
+    content:counter(step); position:absolute; left:0; top:0;
     width:26px; height:26px; border-radius:50%; background:var(--safelight-dim);
     border:1px solid rgba(240,166,58,.35); color:var(--safelight);
     font-family:var(--font-mono); font-size:.72rem; font-weight:700;
-    display:flex; align-items:center; justify-content:center; }
+    display:flex; align-items:center; justify-content:center;
+  }
   html[dir="rtl"] .steps li { padding-left:0; padding-right:38px; }
   html[dir="rtl"] .steps li::before { left:auto; right:0; }
   html[dir="rtl"] .steps h3 { letter-spacing:0; }
-  .form-title { font-family:var(--font-mono); font-size:.82rem; letter-spacing:.2em;
-    text-transform:uppercase; color:var(--ivory); margin:22px 0 4px; }
+  .form-title {
+    font-family:var(--font-mono); font-size:.82rem; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--ivory); margin:22px 0 4px;
+  }
   html[dir="rtl"] .form-title { letter-spacing:0; }
   .help { font-size:.78rem; color:var(--muted); margin:4px 0 0; line-height:1.4; }
-  .countdown { animation:cd-pulse 2.4s ease-in-out infinite; }
+  .countdown {
+    animation:cd-pulse 2.4s ease-in-out infinite, rise .7s cubic-bezier(.2,.7,.2,1) .5s both;
+  }
   @keyframes cd-pulse {
     0%,100% { box-shadow:inset 2px 0 0 -1px var(--safelight); }
-    50%     { box-shadow:inset 2px 0 0 -1px var(--safelight), 0 0 14px -2px var(--safelight-dim); }
+    50% { box-shadow:inset 2px 0 0 -1px var(--safelight), 0 0 14px -2px var(--safelight-dim); }
   }
-  input[type=text], input[type=tel], input[type=password] { transition:border-color .15s, box-shadow .15s, transform .15s; }
   input:focus { transform:translateY(-1px); }
-  @media (prefers-reduced-motion:reduce){ .countdown{animation:none!important;} input:focus{transform:none!important;} }
+  @media (prefers-reduced-motion:reduce){
+    .welcome-hero, .welcome-card, .steps, .countdown, input:focus {
+      animation:none!important; transform:none!important;
+    }
+  }
+  @media (min-width:480px) {
+    .welcome-hero { padding:36px 0 24px; }
+    .welcome-card { padding:22px 24px; }
+  }
 </style>
 {% endblock %}
 {% block body %}
 <div class="film-edge"></div>
 <div class="stage">
-  <div class="eyebrow">{{ t.join_eyebrow }}</div>
-  <h1>{{ event.name }}</h1>
+  <div class="welcome-hero">
+    <div class="eyebrow">{{ t.join_eyebrow }}</div>
+    <h1>{{ event.name }}</h1>
+  </div>
 
-  <div class="welcome-box">
+  <div class="welcome-card">
     <h2>{{ join_explain }}</h2>
   </div>
 
@@ -84,9 +118,11 @@
              placeholder="{% if lang == 'fa' %}۰۹۱۲۳۴۵۶۷۸۹{% else %}09123456789{% endif %}">
       <div class="help">{{ t.join_phone_help }}</div>
 
-      <label for="password">{{ t.label_password }}</label>
-      <input id="password" name="password" type="password" required>
-      <div class="help">{{ t.join_password_help }}</div>
+      {% if event.requires_password %}
+        <label for="password">{{ t.label_password }}</label>
+        <input id="password" name="password" type="password" required>
+        <div class="help">{{ t.join_password_help }}</div>
+      {% endif %}
 
       <button type="submit">{{ t.btn_load }}</button>
     </form>

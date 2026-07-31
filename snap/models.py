@@ -16,7 +16,10 @@ def photo_upload_path(instance, filename):
 class Event(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, help_text="Used in the QR URL: /e/<slug>/")
-    password_hash = models.CharField(max_length=256, editable=False)
+    # Blank = open event: guests join with just name + phone, no password step.
+    password_hash = models.CharField(
+        max_length=256, blank=True, default="", editable=False
+    )
     roll_size = models.PositiveIntegerField(
         default=10, help_text="Number of photos each guest may take (N)."
     )
@@ -35,9 +38,17 @@ class Event(models.Model):
         return f"{self.name} (/e/{self.slug}/)"
 
     def set_password(self, raw_password):
-        self.password_hash = make_password(raw_password)
+        self.password_hash = make_password(raw_password) if raw_password else ""
+
+    @property
+    def requires_password(self):
+        """False for open events — the join form then hides the password field."""
+        return bool(self.password_hash)
 
     def check_password(self, raw_password):
+        # An event with no password accepts anyone who has the link.
+        if not self.requires_password:
+            return True
         return check_password(raw_password, self.password_hash)
 
     @property

@@ -229,11 +229,40 @@
     .frame.qr::after{ display:none; }
   }
 
+  /* ---------- Mobile ---------- *
+   * Guests arrive here from a phone, so the phone layout is the real one:
+   * one column, tighter rhythm, and full-width CTAs that are easy to hit. */
   @media (max-width:720px){
-    .hero { padding:64px 0 30px; }
-    .steps,.why-grid{ grid-template-columns:1fr; }
-    .steps::before{ display:none; }
+    .hero { padding:52px 0 26px; }
+    .aperture { width:62px; height:62px; margin-bottom:20px; }
+    .aperture .blades { width:44px; height:44px; }
+    .hero h1 { font-size:clamp(2.5rem,11vw,3.6rem); line-height:1; }
+    .hero p { font-size:1.02rem; margin-top:20px; max-width:34ch; }
+    .hero-actions { margin-top:28px; gap:10px; }
+    .hero-note { font-size:.7rem; margin-top:18px; }
+    .strip-scene { padding:18px 0 48px; }
+    .filmstrip { border-radius:11px; }
     .frame{ width:140px; height:104px; }
+    .section { padding:52px 0; }
+    .section-head { margin-bottom:34px; }
+    .steps,.why-grid{ grid-template-columns:1fr; }
+    .steps { gap:28px; }
+    .steps::before{ display:none; }      /* the connector only reads horizontally */
+    .why-card { padding:24px; border-radius:15px; }
+    .final-card { padding:44px 22px; border-radius:20px; }
+  }
+  /* Narrow phones: stack the CTAs so neither wraps mid-label. */
+  @media (max-width:420px){
+    .hero-actions { flex-direction:column; align-items:stretch; }
+    .hero-actions .btn { width:100%; justify-content:center; }
+    .hero h1 { font-size:2.25rem; }
+    .frame{ width:120px; height:90px; }
+  }
+  /* Card lift is a pointer affordance — on touch it sticks after a tap. */
+  @media (hover:none){
+    .why-card:hover { transform:none; box-shadow:none; border-color:var(--line); }
+    .frames:hover .frame { opacity:1; }
+    .frames .frame:hover { transform:none; box-shadow:none; }
   }
 </style>
 {% endblock %}
@@ -279,7 +308,7 @@
   <div class="wrap">
     <div class="section-head" data-reveal>
       <span class="kicker">{{ t.lp_how_eyebrow }}</span>
-      <h2>{{ t.lp_scan_hint }}</h2>
+      <h2>{{ t.lp_how_title }}</h2>
     </div>
     <div class="steps">
       <div class="step" data-reveal style="--d:0s"><div class="badge">01</div><h3>{{ t.lp_how_1_t }}</h3><p>{{ t.lp_how_1_d }}</p></div>
@@ -294,6 +323,7 @@
   <div class="wrap">
     <div class="section-head" data-reveal>
       <span class="kicker">{{ t.lp_why_eyebrow }}</span>
+      <h2>{{ t.lp_why_title }}</h2>
     </div>
     <div class="why-grid">
       <div class="why-card" data-reveal style="--d:0s">

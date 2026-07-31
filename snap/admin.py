@@ -15,7 +15,15 @@ class EventAdminForm(forms.ModelForm):
     password = forms.CharField(
         widget=forms.PasswordInput(render_value=False),
         required=False,
-        help_text="Set/reset the guest password. Leave blank to keep the current one.",
+        help_text=(
+            "Optional. Leave blank on a new event to let anyone with the link "
+            "join. On an existing event, blank keeps the current password — "
+            "tick 'Remove password' to clear it."
+        ),
+    )
+    remove_password = forms.BooleanField(
+        required=False,
+        help_text="Clear the password so anyone with the link can join.",
     )
 
     class Meta:
@@ -28,12 +36,15 @@ class EventAdminForm(forms.ModelForm):
             "end_at",
             "is_active",
             "password",
+            "remove_password",
         ]
 
     def save(self, commit=True):
         event = super().save(commit=False)
         raw = self.cleaned_data.get("password")
-        if raw:
+        if self.cleaned_data.get("remove_password"):
+            event.set_password("")  # open event
+        elif raw:
             event.set_password(raw)
         if commit:
             event.save()
@@ -41,9 +52,13 @@ class EventAdminForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        # New event must have a password.
-        if not self.instance.pk and not cleaned.get("password"):
-            self.add_error("password", "A password is required for a new event.")
+        # Password is optional; an event with none is simply open to anyone with
+        # the link. Only guard against the contradictory combination.
+        if cleaned.get("remove_password") and cleaned.get("password"):
+            self.add_error(
+                "remove_password",
+                "Either set a new password or remove it — not both.",
+            )
         return cleaned
 
 
@@ -53,19 +68,20 @@ def download_all_photos(modeladmin, request, queryset):
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for event in queryset:
             for guest in event.guests.all():
+                # Two guests can share a name (only phone is unique), so the
+                # phone is part of the folder — otherwise their photos would
+                # collide and overwrite inside the ZIP.
+                safe_name = "".join(
+                    c if c.isalnum() or c in "-_ " else "_" for c in guest.name
+                ).strip()
+                folder = f"{safe_name or 'guest'}-{guest.phone or guest.pk}"
                 for i, photo in enumerate(guest.photos.all(), start=1):
                     photo.image.open("rb")
                     try:
                         data = photo.image.read()
                     finally:
                         photo.image.close()
-                    safe_name = (
-                        "".join(
-                            c if c.isalnum() or c in "-_ " else "_" for c in guest.name
-                        ).strip()
-                        or f"guest{guest.pk}"
-                    )
-                    zf.writestr(f"{event.slug}/{safe_name}/{i:03d}.jpg", data)
+                    zf.writestr(f"{event.slug}/{folder}/{i:03d}.jpg", data)
     buffer.seek(0)
     resp = HttpResponse(buffer.getvalue(), content_type="application/zip")
     resp["Content-Disposition"] = 'attachment; filename="quicksnap_photos.zip"'

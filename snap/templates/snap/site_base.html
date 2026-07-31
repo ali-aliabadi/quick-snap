@@ -130,6 +130,27 @@
     }
 
     :focus-visible { outline:2px solid var(--amber); outline-offset:3px; border-radius:4px; }
+
+    /* --- Mobile: this site is used on phones first. The nav is one row that
+       must survive a 320px screen, so the in-page "how it works" anchor drops
+       out (it only exists on the landing page) and everything else tightens. --- */
+    @media (max-width:640px){
+      .wrap { padding:0 18px; }
+      .nav-in { height:54px; gap:10px; }
+      .brand { font-size:1rem; gap:7px; min-width:0; }
+      .nav-links { gap:10px; }
+      .nav-links a.nav-how { display:none; }
+      .nav-links a:not(.btn) { font-size:.86rem; white-space:nowrap; }
+      .btn { padding:10px 15px; font-size:.86rem; }
+      .lang-toggle { padding:6px 10px; font-size:.72rem; }
+      .foot { padding:26px 0; }
+      .foot-in { flex-direction:column; align-items:flex-start; gap:8px; }
+    }
+    /* Underline-on-hover is a pointer affordance; on touch it just flickers. */
+    @media (hover:none){
+      .nav-links a::after { display:none; }
+    }
+
     @media (prefers-reduced-motion:reduce){
       html{scroll-behavior:auto;} *{transition:none!important;animation:none!important;}
       .reveal{opacity:1!important;transform:none!important;}
@@ -142,7 +163,7 @@
     <div class="wrap nav-in">
       <a class="brand" href="{% url 'landing' %}"><span class="lens"></span>{{ t.site_name }}</a>
       <div class="nav-links">
-        <a href="{% url 'landing' %}#how">{{ t.nav_how }}</a>
+        <a class="nav-how" href="{% url 'landing' %}#how">{{ t.nav_how }}</a>
         <a href="{% url 'events' %}">{{ t.nav_events }}</a>
         <form method="post" action="{% url 'set_language' %}" class="lang-form">
           {% csrf_token %}

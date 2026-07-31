@@ -1,21 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}" dir="{% if rtl %}rtl{% else %}ltr{% endif %}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>{{ event.name }} — Viewfinder</title>
+  <!-- Browser pinch-zoom stays off here on purpose: this page handles pinch
+       itself to drive the camera's zoom, and a zoomed *page* would break the
+       fixed viewfinder layout. Every other page allows pinch-zoom. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>{{ event.name }} — {{ t.site_name }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Space+Mono:wght@400;700&family=Vazirmatn:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --film-black:#17110D; --safelight:#F0A63A; --shutter:#D63B24;
       --ivory:#F3EAD9; --muted:#A08A72; --sprocket:#0E0A07;
+      --ui:"Space Mono",monospace;
     }
+    /* Persian needs Vazirmatn — Space Mono has no Persian glyphs, so without
+       this the whole viewfinder UI falls back to a default system font. */
+    html[dir="rtl"] { --ui:"Vazirmatn",system-ui,sans-serif; }
     * { box-sizing:border-box; }
     html, body { margin:0; height:100dvh; background:#000; overflow:hidden;
-      font-family:"Space Mono",monospace; }
-    #video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; background:#000; }
+      font-family:var(--ui); -webkit-text-size-adjust:100%;
+      overscroll-behavior:none; -webkit-tap-highlight-color:transparent; }
+    /* Video + zoom: the preview fills the screen and can be scaled for zoom.
+       The transform-origin stays center so pinch-to-zoom feels natural. */
+    #video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; background:#000;
+      transform-origin:center; transition:transform .08s ease-out; }
     #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
     #flash.fire { animation:flash .18s ease-out; }
     @keyframes flash { 0%{opacity:.92} 100%{opacity:0} }
@@ -58,6 +69,7 @@
     }
     #endcd:empty { display:none; }
 
+    /* Camera flip button mirrors sides in RTL */
     #switch {
       position:absolute; right:28px; bottom:calc(env(safe-area-inset-bottom) + 47px);
       width:52px; height:52px; border-radius:50%;
@@ -68,6 +80,40 @@
     html[dir="rtl"] #switch { right:auto; left:28px; }
     #switch:active { transform:scale(.92); background:rgba(14,10,7,.9); }
     #switch svg { width:24px; height:24px; }
+
+    /* Zoom controls: + button overlays the counter, slider when zooming actively */
+    #zoom-btn {
+      position:fixed; top:calc(env(safe-area-inset-top) + 16px); right:16px;
+      width:40px; height:40px; border-radius:50%;
+      background:rgba(14,10,7,.72); border:1px solid rgba(243,234,217,.22);
+      color:var(--ivory); backdrop-filter:blur(8px);
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      font-size:1.4rem; font-weight:700; line-height:1; user-select:none;
+      transition:transform .15s, background .15s;
+    }
+    html[dir="rtl"] #zoom-btn { right:auto; left:16px; }
+    #zoom-btn:active { transform:scale(.92); background:rgba(14,10,7,.9); }
+    #zoom-btn:disabled { opacity:.45; cursor:default; }
+    #zoom-slider {
+      position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:16px;
+      width:40px; height:0; opacity:0; pointer-events:none;
+      background:rgba(14,10,7,.82); border:1px solid rgba(243,234,217,.28);
+      border-radius:20px; backdrop-filter:blur(8px);
+      display:flex; flex-direction:column; align-items:center;
+      padding:12px 0; transition:height .25s, opacity .25s, padding .25s;
+    }
+    html[dir="rtl"] #zoom-slider { right:auto; left:16px; }
+    #zoom-slider.show { height:160px; opacity:1; pointer-events:auto; }
+    #zoom-track {
+      flex:1; width:4px; background:rgba(243,234,217,.18); border-radius:2px;
+      position:relative; cursor:pointer;
+    }
+    #zoom-thumb {
+      position:absolute; left:50%; transform:translateX(-50%); width:18px; height:18px;
+      border-radius:50%; background:var(--safelight); border:2px solid rgba(14,10,7,.9);
+      box-shadow:0 0 8px rgba(240,166,58,.45); cursor:grab; touch-action:none;
+    }
+    #zoom-thumb:active { cursor:grabbing; }
 
     .controls {
       position:fixed; left:0; right:0; bottom:0; display:flex; flex-direction:column;
@@ -101,7 +147,7 @@
     #snap:disabled::after { background:#6b5c50; }
     #hint { color:rgba(243,234,217,.72); font-size:.64rem; letter-spacing:.22em;
       text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.7); text-align:center;
-      padding:0 24px; }
+      padding:0 24px; font-family:var(--ui); }
     html[dir="rtl"] #hint { letter-spacing:0; text-transform:none; font-size:.8rem; }
 
     /* Gallery picker — mirrors the flip button on the opposite side */
@@ -132,8 +178,9 @@
       animation:gate-pulse 1.8s ease-in-out infinite; }
     @keyframes gate-pulse { 0%,100%{ opacity:.72; } 50%{ opacity:1; text-shadow:0 0 26px rgba(240,166,58,.7); } }
     #overlay-retry { margin-top:12px; padding:13px 26px; border:0; border-radius:3px;
-      background:var(--safelight); color:#1A120A; font-family:"Space Mono",monospace;
+      background:var(--safelight); color:#1A120A; font-family:var(--ui);
       font-weight:700; letter-spacing:.16em; text-transform:uppercase; font-size:.82rem; }
+    html[dir="rtl"] #overlay-retry { letter-spacing:0; text-transform:none; }
     /* --- Sending overlay: a developing photo, with a live progress ring --- */
     #sending {
       position:fixed; inset:0; z-index:20; display:none; flex-direction:column;
@@ -178,16 +225,21 @@
     .ring .pct i { font-style:normal; font-size:.9rem; color:var(--muted); align-self:flex-start; margin-top:8px; }
     .send-label {
       font-size:.68rem; letter-spacing:.28em; text-transform:uppercase; color:var(--muted);
+      font-family:var(--ui);
     }
+    html[dir="rtl"] .send-label { letter-spacing:0; text-transform:none; font-size:.84rem; }
+    html[dir="rtl"] #counter .lab { letter-spacing:0; text-transform:none; font-size:.72rem; }
+    html[dir="rtl"] #endcd { letter-spacing:0; text-transform:none; font-size:.76rem; }
 
     @media (prefers-reduced-motion:reduce) {
-      #snap, #flash, #counter .num, #gate-cd { transition:none; animation:none; }
+      #snap, #flash, #counter .num, #gate-cd, #video, #zoom-slider { transition:none; animation:none; }
     }
   </style>
 </head>
 <body
   data-capture-url="{% url 'snap:capture' event.slug %}"
   data-done-url="{% url 'snap:done' event.slug %}"
+  data-join-url="{% url 'snap:join' event.slug %}"
   data-remaining="{{ remaining }}"
   data-start="{{ event.start_at|date:'c' }}"
   data-end="{{ event.end_at|date:'c' }}"
@@ -203,6 +255,14 @@
 
   <div id="counter"><span class="num">0</span><span class="lab">{{ t.exp_left }}</span></div>
   <div id="endcd"></div>
+
+  <!-- Zoom controls: + button always visible, slider when active -->
+  <button id="zoom-btn" type="button" aria-label="{{ t.zoom }}" title="{{ t.zoom }}">+</button>
+  <div id="zoom-slider">
+    <div id="zoom-track">
+      <div id="zoom-thumb"></div>
+    </div>
+  </div>
 
   <div class="controls">
     <div class="shutter-row">
@@ -256,6 +316,7 @@
     const body = document.body;
     const CAPTURE_URL = body.dataset.captureUrl;
     const DONE_URL = body.dataset.doneUrl;
+    const JOIN_URL = body.dataset.joinUrl;
     let remaining = parseInt(body.dataset.remaining, 10);
     const startAt = body.dataset.start ? new Date(body.dataset.start) : null;
     const endAt = body.dataset.end ? new Date(body.dataset.end) : null;
@@ -286,7 +347,167 @@
     const pctNum = document.getElementById("pct-num");
     const overlay = document.getElementById("overlay");
     const overlayMsg = document.getElementById("overlay-msg");
+    const zoomBtn = document.getElementById("zoom-btn");
+    const zoomSlider = document.getElementById("zoom-slider");
+    const zoomTrack = document.getElementById("zoom-track");
+    const zoomThumb = document.getElementById("zoom-thumb");
     const csrf = document.querySelector("input[name=csrfmiddlewaretoken]").value;
+
+    /* ---------------------------------------------------------------- *
+     *  Zoom. Two mechanisms, one logical scale (`zoom`, 1 = no zoom):
+     *
+     *  1. Optical/sensor zoom via the MediaStreamTrack `zoom` constraint
+     *     (Android Chrome). Best quality — the sensor does the work, so
+     *     the captured still is zoomed with no pixels thrown away.
+     *  2. Digital zoom fallback (iOS Safari has no `zoom` constraint):
+     *     scale the preview with CSS and crop the *same* region when
+     *     encoding, so the saved photo matches what the guest framed.
+     *
+     *  MAX_DIGITAL is deliberately low — digital zoom is a centre crop,
+     *  so pushing past ~3x visibly softens a wedding photo.
+     * ---------------------------------------------------------------- */
+    const MAX_DIGITAL = 3;
+    let zoom = 1;                 // logical zoom the guest sees
+    let zoomMax = MAX_DIGITAL;    // upper bound for this camera
+    let zoomCaps = null;          // native {min,max,step} when supported
+    let zoomPending = false;      // rAF throttle for applyConstraints
+
+    function readZoomCaps() {
+      zoomCaps = null;
+      zoomMax = MAX_DIGITAL;
+      if (!track || !track.getCapabilities) return;
+      let caps = {};
+      try { caps = track.getCapabilities() || {}; } catch (e) { return; }
+      if (caps.zoom && typeof caps.zoom.max === "number" && caps.zoom.max > caps.zoom.min) {
+        zoomCaps = caps.zoom;
+        // Native zoom ranges are in device units (often 1..8, sometimes 100..400).
+        // Express everything as a multiple of the minimum so the label reads "2.0x".
+        zoomMax = Math.min(8, caps.zoom.max / caps.zoom.min);
+      }
+    }
+
+    /* Native zoom is a device-unit value; logical 1 maps to caps.zoom.min. */
+    function nativeZoomFor(z) {
+      const span = zoomCaps.max - zoomCaps.min;
+      const frac = (z - 1) / (zoomMax - 1);
+      let v = zoomCaps.min + span * Math.max(0, Math.min(1, frac));
+      if (zoomCaps.step) v = Math.round(v / zoomCaps.step) * zoomCaps.step;
+      return Math.max(zoomCaps.min, Math.min(zoomCaps.max, v));
+    }
+
+    function applyZoom() {
+      const mirror = facing === "user" ? " scaleX(-1)" : "";
+      if (zoomCaps) {
+        // Sensor zoom: preview needs no CSS scale, the frames arrive zoomed.
+        video.style.transform = mirror.trim() || "none";
+        if (!zoomPending) {
+          zoomPending = true;
+          requestAnimationFrame(() => {
+            zoomPending = false;
+            if (!track) return;
+            track.applyConstraints({ advanced: [{ zoom: nativeZoomFor(zoom) }] })
+              .catch(() => { /* device refused; preview stays put */ });
+          });
+        }
+      } else {
+        // Digital zoom: scale the preview, crop to match at encode time.
+        video.style.transform = "scale(" + zoom + ")" + mirror;
+      }
+      renderZoom();
+    }
+
+    function renderZoom() {
+      zoomBtn.textContent = zoom > 1.05 ? faDigit(zoom.toFixed(1)) + "x" : "+";
+      const frac = zoomMax > 1 ? (zoom - 1) / (zoomMax - 1) : 0;
+      // Slider is vertical, bottom = 1x, top = max
+      zoomThumb.style.bottom = "calc(" + (frac * 100) + "% - 9px)";
+      zoomBtn.setAttribute("aria-valuenow", zoom.toFixed(1));
+    }
+
+    function setZoom(z) {
+      const next = Math.max(1, Math.min(zoomMax, z));
+      if (Math.abs(next - zoom) < 0.001) return;
+      zoom = next;
+      applyZoom();
+    }
+
+    function resetZoom() {
+      zoom = 1;
+      applyZoom();
+    }
+
+    /* --- Slider: tap or drag anywhere on the track --- */
+    let sliderHideTimer = null;
+
+    function showSlider() {
+      zoomSlider.classList.add("show");
+      clearTimeout(sliderHideTimer);
+      sliderHideTimer = setTimeout(() => zoomSlider.classList.remove("show"), 4000);
+    }
+
+    function zoomFromPointer(clientY) {
+      const r = zoomTrack.getBoundingClientRect();
+      if (!r.height) return;
+      // Bottom of the track is 1x, top is zoomMax.
+      const frac = 1 - (clientY - r.top) / r.height;
+      setZoom(1 + Math.max(0, Math.min(1, frac)) * (zoomMax - 1));
+      showSlider();
+    }
+
+    zoomBtn.addEventListener("click", () => {
+      if (zoomSlider.classList.contains("show") && zoom > 1.05) resetZoom();
+      showSlider();
+    });
+
+    let dragging = false;
+    zoomTrack.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      zoomTrack.setPointerCapture && zoomTrack.setPointerCapture(e.pointerId);
+      zoomFromPointer(e.clientY);
+      e.preventDefault();
+    });
+    zoomTrack.addEventListener("pointermove", (e) => {
+      if (dragging) { zoomFromPointer(e.clientY); e.preventDefault(); }
+    });
+    zoomTrack.addEventListener("pointerup", () => { dragging = false; });
+    zoomTrack.addEventListener("pointercancel", () => { dragging = false; });
+
+    /* --- Pinch to zoom on the preview itself --- */
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
+
+    function touchDist(t) {
+      const dx = t[0].clientX - t[1].clientX;
+      const dy = t[0].clientY - t[1].clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    document.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = touchDist(e.touches);
+        pinchStartZoom = zoom;
+        showSlider();
+      }
+    }, { passive: true });
+
+    document.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 2 && pinchStartDist > 0) {
+        e.preventDefault();   // don't let the browser try to pan/zoom the page
+        setZoom(pinchStartZoom * (touchDist(e.touches) / pinchStartDist));
+        showSlider();
+      }
+    }, { passive: false });
+
+    document.addEventListener("touchend", (e) => {
+      if (e.touches.length < 2) pinchStartDist = 0;
+    }, { passive: true });
+
+    /* Desktop/trackpad: wheel + ctrl (pinch gesture) or plain wheel over video */
+    video.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      setZoom(zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08));
+      showSlider();
+    }, { passive: false });
 
     function fmt(ms) {
       let s = Math.max(0, Math.floor(ms / 1000));
@@ -328,7 +549,13 @@
       }
     }
 
-    function showOverlay(msg, showRetry) {
+    /* `kind` decides what Retry does: restart the camera for a camera fault,
+       or just dismiss for a failed upload (the camera is fine — retrying it
+       would pointlessly tear the preview down). */
+    let overlayKind = "camera";
+
+    function showOverlay(msg, showRetry, kind) {
+      overlayKind = kind || "camera";
       overlayMsg.textContent = msg;
       document.getElementById("overlay-retry").style.display = showRetry ? "" : "none";
       overlay.classList.add("show");
@@ -369,8 +596,16 @@
         if (window.ImageCapture && track) {
           try { imageCapture = new ImageCapture(track); } catch (e) { imageCapture = null; }
         }
+
+        // A new track means new zoom limits (front cameras usually have none).
+        readZoomCaps();
+        resetZoom();
+        zoomBtn.disabled = zoomMax <= 1;
+
+        // iOS sometimes leaves the element paused despite autoplay.
+        try { await video.play(); } catch (e) { /* preview will start on its own */ }
       } catch (err) {
-        showOverlay(T.camErr, true);
+        showOverlay(T.camErr, true, "camera");
       }
     }
 
@@ -390,21 +625,33 @@
       return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
     }
 
-    function encode(source, sw, sh, mirror) {
-      const scale = Math.min(1, MAX_EDGE / Math.max(sw, sh));
-      const dw = Math.max(1, Math.round(sw * scale));
-      const dh = Math.max(1, Math.round(sh * scale));
+    /* Encode `source` to a JPEG blob.
+       `crop` > 1 takes a centre crop of that factor first — this is how digital
+       zoom reaches the saved file. Without it the guest would frame a zoomed
+       shot and get back the full wide frame. Sensor zoom passes crop = 1,
+       because those frames arrive already zoomed. */
+    function encode(source, sw, sh, mirror, crop) {
+      const z = Math.max(1, crop || 1);
+      const cw = sw / z, ch = sh / z;            // source rect we actually keep
+      const cx = (sw - cw) / 2, cy = (sh - ch) / 2;
+      const scale = Math.min(1, MAX_EDGE / Math.max(cw, ch));
+      const dw = Math.max(1, Math.round(cw * scale));
+      const dh = Math.max(1, Math.round(ch * scale));
       canvas.width = dw; canvas.height = dh;
       const ctx = canvas.getContext("2d");
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";  // sharper downscale from sensor res
       if (mirror) { ctx.translate(dw, 0); ctx.scale(-1, 1); }
-      ctx.drawImage(source, 0, 0, dw, dh);
+      ctx.drawImage(source, cx, cy, cw, ch, 0, 0, dw, dh);
       return new Promise(r => canvas.toBlob(r, "image/jpeg", JPEG_Q));
     }
 
+    /* Digital zoom needs a matching crop at capture time; sensor zoom doesn't. */
+    function captureCrop() { return zoomCaps ? 1 : zoom; }
+
     async function grabBlob() {
       const mirror = facing === "user";
+      const crop = captureCrop();
       // Preferred: full-resolution still from the sensor — but time-boxed,
       // because takePhoto() stalls on some devices. Falls back to the frame.
       if (imageCapture) {
@@ -412,14 +659,14 @@
           const shot = await withTimeout(imageCapture.takePhoto(), TAKEPHOTO_MS, "takephoto");
           if (shot && shot.size > 0) {
             const bmp = await createImageBitmap(shot);
-            const out = await encode(bmp, bmp.width, bmp.height, mirror);
+            const out = await encode(bmp, bmp.width, bmp.height, mirror, crop);
             if (bmp.close) bmp.close();
             return out;
           }
         } catch (e) { /* fall through to the reliable canvas path */ }
       }
       // Reliable path: the current preview frame at its native resolution.
-      return encode(video, video.videoWidth, video.videoHeight, mirror);
+      return encode(video, video.videoWidth, video.videoHeight, mirror, crop);
     }
 
     const RING_LEN = 326.726;  // 2·π·52 — must match the SVG circle radius
@@ -483,6 +730,10 @@
         let d = {};
         try { d = JSON.parse(res.text); } catch (e) {}
         if (d.error === "ended" || d.error === "closed") { window.location = DONE_URL; return; }
+        // Session expired mid-event (8h cap) — send them back to re-enter their
+        // number, which resumes the same roll. Without this the shutter just
+        // silently stopped working.
+        if (d.error === "not_joined") { window.location = JOIN_URL; return; }
         tickClocks();
         return;
       }
@@ -506,10 +757,44 @@
       try {
         await submitBlob(await grabBlob());
       } catch (e) {
-        showOverlay(T.upErr, true);
+        showOverlay(T.upErr, true, "upload");
       } finally {
         sending.classList.remove("show");
         setBusy(false);
+      }
+    }
+
+    /* Decode a picked file, honouring EXIF orientation.
+       createImageBitmap ignores EXIF by default, so a photo shot in portrait
+       uploads sideways. `imageOrientation:"from-image"` fixes that where it's
+       supported; the <img> fallback covers older Safari and formats
+       createImageBitmap can't decode (e.g. HEIC), which browsers happily let
+       through `accept="image/*"`. */
+    async function decodeImage(file) {
+      if (window.createImageBitmap) {
+        try {
+          const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+          return { src: bmp, w: bmp.width, h: bmp.height, release: () => bmp.close && bmp.close() };
+        } catch (e) { /* fall through to the <img> path */ }
+      }
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = () => reject(new Error("decode"));
+          el.src = url;
+        });
+        // <img> applies EXIF orientation itself, so drawing it is already upright.
+        return {
+          src: img,
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+          release: () => URL.revokeObjectURL(url),
+        };
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        throw e;
       }
     }
 
@@ -523,14 +808,17 @@
       setProgress(null);
       sending.classList.add("show");
 
+      let decoded = null;
       try {
-        const bmp = await createImageBitmap(file);
-        const blob = await encode(bmp, bmp.width, bmp.height, false);
-        if (bmp.close) bmp.close();
+        decoded = await decodeImage(file);
+        // No mirror and no crop: a gallery photo is already framed as the
+        // guest wants it — the live preview's zoom has nothing to do with it.
+        const blob = await encode(decoded.src, decoded.w, decoded.h, false, 1);
         await submitBlob(blob);
       } catch (e) {
-        showOverlay(T.upErr, true);
+        showOverlay(T.upErr, true, "upload");
       } finally {
+        if (decoded) decoded.release();
         sending.classList.remove("show");
         setBusy(false);
       }
@@ -544,13 +832,25 @@
       if (file) usePickedFile(file);
     });
     document.getElementById("switch").addEventListener("click", () => {
+      if (busy) return;               // don't swap cameras mid-upload
       facing = facing === "environment" ? "user" : "environment";
-      video.style.transform = facing === "user" ? "scaleX(-1)" : "none";
+      startCamera();                  // resets zoom and re-applies the mirror
+    });
+    document.getElementById("overlay-retry").addEventListener("click", () => {
+      if (overlayKind === "upload") { overlay.classList.remove("show"); return; }
       startCamera();
     });
-    document.getElementById("overlay-retry").addEventListener("click", startCamera);
+
+    /* Backgrounding the tab suspends the camera on iOS and the preview comes
+       back frozen. If the track died while we were away, rebuild the stream. */
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || busy) return;
+      if (!stream || !track || track.readyState === "ended") { startCamera(); return; }
+      video.play().catch(() => { /* nothing more we can do */ });
+    });
 
     renderCounter();
+    renderZoom();
     tickClocks();
     if (startAt || endAt) setInterval(tickClocks, 1000);
     startCamera();

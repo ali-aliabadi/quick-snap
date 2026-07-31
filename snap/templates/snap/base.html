@@ -3,7 +3,7 @@
 <html lang="{{ lang }}" dir="{% if rtl %}rtl{% else %}ltr{% endif %}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Quick Snap{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,10 +35,11 @@
       text-transform:none; letter-spacing:0;
     }
     * { box-sizing:border-box; }
+    html { -webkit-text-size-adjust:100%; }
     body {
       margin:0; min-height:100dvh; background:var(--film-black); color:var(--ivory);
       font-family:var(--font-body);
-      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      display:flex; flex-direction:column; align-items:center;
       padding:0; overflow-x:hidden;
       background-image:radial-gradient(120% 80% at 50% -10%, rgba(240,166,58,.10), transparent 60%);
     }
@@ -51,7 +52,7 @@
       background-size:26px 100%; background-repeat:repeat-x;
     }
 
-    .stage { width:100%; max-width:460px; padding:0 22px; }
+    .stage { width:100%; max-width:460px; padding:0 22px; margin:auto 0; }
 
     .eyebrow {
       font-family:var(--font-mono); font-size:.72rem; letter-spacing:.32em;
@@ -81,7 +82,7 @@
       text-transform:uppercase; color:var(--muted); margin:16px 0 7px;
     }
     label:first-child { margin-top:0; }
-    input[type=text], input[type=email], input[type=password] {
+    input[type=text], input[type=email], input[type=tel], input[type=password] {
       width:100%; padding:13px 14px; border-radius:3px; border:1px solid var(--panel-edge);
       background:#160F0B; color:var(--ivory); font-size:1rem; font-family:var(--font-body);
       transition:border-color .15s, box-shadow .15s;
@@ -92,7 +93,8 @@
     }
 
     button, .btn {
-      width:100%; margin-top:22px; padding:15px; border:0; border-radius:3px;
+      width:100%; margin-top:22px; padding:16px; border:0; border-radius:3px;
+      min-height:52px;                 /* comfortable thumb target */
       background:var(--safelight); color:#1A120A;
       font-family:var(--font-mono); font-size:.9rem; font-weight:700;
       letter-spacing:.16em; text-transform:uppercase; cursor:pointer;
@@ -115,10 +117,12 @@
       text-transform:uppercase;
     }
 
-    /* --- Language toggle: floats top-inline-end, above the stage --- */
-    .app-lang { position:fixed; top:13px; inset-inline-end:15px; z-index:100; margin:0; }
+    /* --- Language toggle: floats top-inline-end, doesn't overflow content --- */
+    .app-lang {
+      position:absolute; top:13px; inset-inline-end:15px; z-index:100; margin:0;
+    }
     .app-lang button {
-      width:auto; margin:0; padding:7px 13px; border-radius:100px;
+      width:auto; margin:0; padding:8px 14px; border-radius:100px; min-height:40px;
       display:inline-flex; align-items:center; gap:6px;
       background:var(--safelight-dim); border:1px solid rgba(240,166,58,.28);
       color:var(--safelight); font-family:var(--font-mono);

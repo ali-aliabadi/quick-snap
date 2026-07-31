@@ -1,38 +1,93 @@
 {% extends "snap/base.html" %}
-{% block title %}Roll complete — {{ event.name }}{% endblock %}
+{% block title %}{{ t.done_title }} — {{ event.name }}{% endblock %}
 {% block head %}
 <style>
-  /* The finished roll develops in stages: eyebrow, headline, then details. */
+  /* The finished roll develops in stages: eyebrow, headline, count, then the rest. */
   @keyframes dev-up { from { opacity:0; transform:translateY(12px); filter:blur(4px); }
                       to   { opacity:1; transform:none; filter:none; } }
-  .stage .eyebrow { animation:dev-up .6s cubic-bezier(.2,.7,.2,1) .15s both; }
-  .stage h1       { animation:dev-up .8s cubic-bezier(.2,.7,.2,1) .30s both; }
-  .stage .muted   { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .55s both; }
-  .stage .spec    { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .75s both; }
-  /* the exposed-frame count glows warmly as it lands */
-  .stage .muted b { animation:count-glow 1.4s ease-out 1s both; }
-  @keyframes count-glow { 0%{ text-shadow:0 0 18px rgba(240,166,58,.8); } 100%{ text-shadow:none; } }
+  .done { text-align:center; padding:26px 0; }
+  .done .eyebrow { text-align:center; animation:dev-up .6s cubic-bezier(.2,.7,.2,1) .15s both; }
+  .done h1 { font-size:clamp(1.9rem,7.5vw,2.7rem); animation:dev-up .8s cubic-bezier(.2,.7,.2,1) .3s both; }
+  .done .muted { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .8s both; }
+  .done .note { animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .95s both; }
+
+  /* Big count — the one number a guest cares about. Lands with a warm glow. */
+  .tally { margin:22px 0 6px; animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .45s both; }
+  .tally .n {
+    display:block; font-family:var(--font-display); font-weight:500;
+    font-size:clamp(3.6rem,20vw,5.4rem); line-height:1; color:var(--safelight);
+    font-variant-numeric:tabular-nums; animation:count-glow 1.6s ease-out .5s both;
+  }
+  @keyframes count-glow {
+    0%   { text-shadow:0 0 26px rgba(240,166,58,.85); }
+    100% { text-shadow:0 0 10px rgba(240,166,58,.18); }
+  }
+  .tally .lab {
+    display:block; margin-top:6px; font-family:var(--font-mono); font-size:.7rem;
+    letter-spacing:.28em; text-transform:uppercase; color:var(--muted);
+  }
+  html[dir="rtl"] .tally .lab { letter-spacing:0; text-transform:none; font-size:.86rem; }
+
+  /* Exposed frames, one per photo — each lights up in sequence. */
+  .strip {
+    display:flex; flex-wrap:wrap; justify-content:center; gap:6px;
+    margin:18px auto 0; max-width:300px;
+  }
+  .strip i {
+    width:20px; height:14px; border-radius:2px; background:var(--safelight);
+    opacity:0; animation:frame-in .4s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes frame-in { from { opacity:0; transform:scale(.4); } to { opacity:.85; transform:none; } }
+
+  .badge {
+    display:inline-flex; align-items:center; gap:8px; margin-top:20px;
+    padding:9px 16px; border-radius:100px;
+    background:var(--safelight-dim); border:1px solid rgba(240,166,58,.28);
+    font-family:var(--font-mono); font-size:.74rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--safelight);
+    animation:dev-up .7s cubic-bezier(.2,.7,.2,1) .85s both;
+  }
+  html[dir="rtl"] .badge { letter-spacing:0; text-transform:none; font-size:.84rem; }
+  .badge svg { width:15px; height:15px; }
+  .note { color:var(--muted); font-size:.84rem; line-height:1.6; margin:16px 0 0; }
+
   @media (prefers-reduced-motion:reduce){
-    .stage .eyebrow,.stage h1,.stage .muted,.stage .spec,.stage .muted b { animation:none!important; }
+    .done .eyebrow,.done h1,.done .muted,.done .note,.tally,.tally .n,.strip i,.badge {
+      animation:none!important; opacity:1!important;
+    }
   }
 </style>
 {% endblock %}
 {% block body %}
 <div class="film-edge"></div>
-<div class="stage" style="text-align:center;">
-  <div class="eyebrow" style="text-align:center;">{{ t.done_eyebrow }}</div>
+<div class="stage done">
+  <div class="eyebrow">{{ t.done_eyebrow }}</div>
   <h1>{{ t.done_title }}</h1>
+
   {% if guest %}
-    <p class="muted">
-      {{ t.done_frames_pre }} <b style="color:var(--ivory);">{{ guest.taken }}</b>
-      {{ t.done_frames_post }} {{ event.name }}.
-    </p>
-    <div class="spec" style="justify-content:center;">
-      <span>{{ t.done_collected }}</span>
+    <div class="tally">
+      <span class="n">{{ guest.taken }}</span>
+      <span class="lab">{{ t.spec_exposures }}</span>
+    </div>
+
+    <div class="strip" aria-hidden="true">
+      {% for slot in photo_slots %}<i style="animation-delay:{{ slot }}ms"></i>{% endfor %}
+    </div>
+
+    <p class="muted">{{ done_frames }}</p>
+
+    <div class="badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+      {{ t.done_collected }}
     </div>
   {% else %}
-    <p class="muted">{{ t.done_thanks }} {{ event.name }}.</p>
+    <p class="muted">{{ done_thanks }}</p>
   {% endif %}
+
+  <p class="note">{{ t.done_note }}</p>
 </div>
 <div class="film-edge"></div>
 {% endblock %}

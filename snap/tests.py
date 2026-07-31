@@ -255,6 +255,36 @@ class CameraViewTests(TestCase):
         r = self.client.get(self.cam)
         self.assertRedirects(r, reverse("snap:done", args=[self.ev.slug]))
 
+    def _joined_camera(self):
+        self.client.post(
+            self.join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
+        return self.client.get(self.cam)
+
+    def test_camera_is_ltr_in_english(self):
+        self.assertContains(self._joined_camera(), 'dir="ltr"')
+
+    @override_settings(APP_LANG="fa")
+    def test_camera_is_rtl_in_persian(self):
+        """The viewfinder is its own standalone template, so it has to opt into
+        lang/dir itself — otherwise every html[dir="rtl"] rule silently dies."""
+        r = self._joined_camera()
+        self.assertContains(r, 'lang="fa"')
+        self.assertContains(r, 'dir="rtl"')
+
+    @override_settings(APP_LANG="fa")
+    def test_camera_loads_persian_font(self):
+        """Space Mono has no Persian glyphs; without Vazirmatn the UI falls back."""
+        self.assertContains(self._joined_camera(), "Vazirmatn")
+
+    def test_camera_exposes_join_url_for_expired_session(self):
+        """capture() answers 403 not_joined once the session lapses; the page
+        needs the join URL to send the guest back to resume their roll."""
+        self.assertContains(self._joined_camera(), f'data-join-url="{self.join}"')
+
+    def test_camera_has_zoom_control(self):
+        self.assertContains(self._joined_camera(), 'id="zoom-btn"')
+
 
 @override_settings(APP_LANG="en")
 class CaptureViewTests(TestCase):
@@ -322,6 +352,57 @@ class DoneViewTests(TestCase):
         )
         r = self.client.get(reverse("snap:done", args=[ev.slug]))
         self.assertEqual(r.status_code, 200)
+
+    @override_settings(APP_LANG="en")
+    def test_done_interpolates_count_and_event(self):
+        """The {n}/{event} holes are filled in the view — templates can't."""
+        ev = make_event(name="Ann's Wedding", password="pw", roll_size=5)
+        self.client.post(
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
+        )
+        g = ev.guests.get()
+        for _ in range(3):
+            Photo.objects.create(guest=g, image=upload())
+        r = self.client.get(reverse("snap:done", args=[ev.slug]))
+        self.assertContains(r, "You took 3 photos at Ann&#x27;s Wedding.")
+        self.assertNotContains(r, "{n}")
+        self.assertNotContains(r, "{event}")
+
+    @override_settings(APP_LANG="fa")
+    def test_done_interpolates_in_persian(self):
+        ev = make_event(name="Mehmooni", password="pw")
+        self.client.post(
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
+        )
+        Photo.objects.create(guest=ev.guests.get(), image=upload())
+        r = self.client.get(reverse("snap:done", args=[ev.slug]))
+        self.assertNotContains(r, "{n}")
+        self.assertNotContains(r, "{event}")
+
+    @override_settings(APP_LANG="en")
+    def test_done_without_session_uses_thanks_copy(self):
+        """Someone opening /done/ cold has no guest — don't render a bare count."""
+        ev = make_event(name="Gala", password="pw")
+        r = self.client.get(reverse("snap:done", args=[ev.slug]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Thanks for shooting at Gala.")
+        self.assertNotContains(r, "{event}")
+
+    @override_settings(APP_LANG="en")
+    def test_done_photo_slots_capped(self):
+        """One lit frame per photo, but a huge roll must not render hundreds."""
+        ev = make_event(password="pw", roll_size=40)
+        self.client.post(
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
+        )
+        g = ev.guests.get()
+        for _ in range(20):
+            Photo.objects.create(guest=g, image=upload())
+        r = self.client.get(reverse("snap:done", args=[ev.slug]))
+        self.assertEqual(len(r.context["photo_slots"]), 12)
 
 
 # --------------------------------------------------------------------------- #
@@ -391,6 +472,54 @@ class I18nTests(TestCase):
 
     def test_all_keys_present_in_both(self):
         self.assertEqual(set(get_strings("fa")), set(get_strings("en")))
+
+    def test_persian_avoids_film_jargon(self):
+        """Guests are not photographers. "حلقه" (film roll) and "فریم" (frame)
+        read as gibberish in a party context — say عکس instead."""
+        fa = get_strings("fa")
+        for key, text in fa.items():
+            for jargon in ("حلقه", "فریم", "کیو‌آر"):
+                self.assertNotIn(
+                    jargon,
+                    text,
+                    f"{key!r} uses photography jargon {jargon!r}: {text!r}",
+                )
+
+    def test_persian_is_consistently_polite(self):
+        """The copy mixed informal (بزن/کن) with formal (کنید), which reads as
+        sloppy to a guest. Keep the whole guest-facing voice formal-polite.
+
+        Matching is anchored to a word end, because every informal imperative is
+        also a prefix of its polite form (کن → کنید, بگیر → بگیرید).
+        """
+        import re
+
+        fa = get_strings("fa")
+        # Bare informal imperatives: the verb, then a word boundary — so `کنید`,
+        # `بگیرید`, `بزنید` don't trip it.
+        informal = re.compile(
+            r"(?:^|\s)(کن|بزن|بگیر|بساز|ببند|بپرس|بده)(?=$|[\s.,؟!،])"
+        )
+        for key, text in fa.items():
+            hit = informal.search(text)
+            self.assertIsNone(
+                hit,
+                f"{key!r} slips into informal address "
+                f"({hit.group(1) if hit else ''!r}): {text!r}",
+            )
+
+    def test_interpolation_placeholders_are_matched_across_languages(self):
+        """A {n}/{event} hole present in one language but not the other means one
+        locale renders a literal placeholder to the guest."""
+        import re
+
+        fa, en = get_strings("fa"), get_strings("en")
+        for key in fa:
+            self.assertEqual(
+                set(re.findall(r"\{[a-z]+\}", fa[key])),
+                set(re.findall(r"\{[a-z]+\}", en[key])),
+                f"{key!r} has mismatched placeholders between fa and en",
+            )
 
     @override_settings(APP_LANG="fa")
     def test_join_page_is_rtl_in_persian(self):
