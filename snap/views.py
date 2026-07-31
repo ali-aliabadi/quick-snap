@@ -70,9 +70,7 @@ def set_language(request):
         next_url = "/"
 
     resp = HttpResponseRedirect(next_url)
-    resp.set_cookie(
-        LANG_COOKIE, lang, max_age=365 * 24 * 3600, samesite="Lax"
-    )
+    resp.set_cookie(LANG_COOKIE, lang, max_age=365 * 24 * 3600, samesite="Lax")
     return resp
 
 

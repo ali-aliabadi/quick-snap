@@ -1,4 +1,4 @@
-"""Tests for Quick Snap: models, guest flow, window gating, email, admin, i18n."""
+"""Tests for Quick Snap: models, guest flow, window gating, phones, admin, i18n."""
 
 import io
 import shutil
@@ -6,18 +6,16 @@ import tempfile
 from datetime import timedelta
 
 from django.conf import settings
-from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
-from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .emails import _send
 from .i18n import get_strings
 from .models import Event, Guest, Photo
+from .phones import normalize_phone
 
 _media_override = None
 
@@ -101,7 +99,7 @@ class GuestModelTests(TestCase):
         self.ev = make_event(roll_size=3)
 
     def test_taken_remaining_full(self):
-        g = Guest.objects.create(event=self.ev, name="Ann")
+        g = Guest.objects.create(event=self.ev, name="Ann", phone="09120000001")
         self.assertEqual(g.taken, 0)
         self.assertEqual(g.remaining, 3)
         self.assertFalse(g.roll_full)
@@ -112,19 +110,27 @@ class GuestModelTests(TestCase):
         self.assertTrue(g.roll_full)
 
     def test_remaining_never_negative(self):
-        g = Guest.objects.create(event=self.ev, name="Ann")
+        g = Guest.objects.create(event=self.ev, name="Ann", phone="09120000001")
         for _ in range(5):  # more than roll_size
             Photo.objects.create(guest=g, image=upload())
         self.assertEqual(g.remaining, 0)
 
-    def test_unique_guest_per_event(self):
-        Guest.objects.create(event=self.ev, name="Ann", email="a@x.com")
+    def test_one_roll_per_phone_per_event(self):
+        Guest.objects.create(event=self.ev, name="Ann", phone="09120000001")
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Guest.objects.create(event=self.ev, name="Ann", email="a@x.com")
+            Guest.objects.create(
+                event=self.ev, name="Someone Else", phone="09120000001"
+            )
 
-    def test_same_name_different_email_allowed(self):
-        Guest.objects.create(event=self.ev, name="Ann", email="a@x.com")
-        Guest.objects.create(event=self.ev, name="Ann", email="b@x.com")
+    def test_same_phone_different_events_allowed(self):
+        other = make_event(slug="other", name="Other")
+        Guest.objects.create(event=self.ev, name="Ann", phone="09120000001")
+        Guest.objects.create(event=other, name="Ann", phone="09120000001")
+        self.assertEqual(Guest.objects.filter(phone="09120000001").count(), 2)
+
+    def test_same_name_different_phone_allowed(self):
+        Guest.objects.create(event=self.ev, name="Ann", phone="09120000001")
+        Guest.objects.create(event=self.ev, name="Ann", phone="09120000002")
         self.assertEqual(self.ev.guests.count(), 2)
 
 
@@ -143,7 +149,6 @@ class PhotoPathTests(TestCase):
 # --------------------------------------------------------------------------- #
 # Guest flow (views)
 # --------------------------------------------------------------------------- #
-@override_settings(APP_LANG="en")
 class JoinViewTests(TestCase):
     def setUp(self):
         self.ev = make_event(password="pw", roll_size=3)
@@ -155,46 +160,70 @@ class JoinViewTests(TestCase):
         self.assertContains(r, self.ev.name)
 
     def test_wrong_password_rejected(self):
-        r = self.client.post(self.url, {"name": "Ann", "password": "nope"})
+        r = self.client.post(
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "nope"}
+        )
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.ev.guests.count(), 0)
 
     def test_missing_name_rejected(self):
-        r = self.client.post(self.url, {"name": "", "password": "pw"})
+        r = self.client.post(
+            self.url, {"name": "", "phone": "09123456789", "password": "pw"}
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_invalid_phone_rejected(self):
+        r = self.client.post(
+            self.url, {"name": "Ann", "phone": "invalid", "password": "pw"}
+        )
         self.assertEqual(r.status_code, 400)
 
     def test_valid_join_creates_guest_and_redirects(self):
         r = self.client.post(
-            self.url, {"name": "Ann", "email": "a@x.com", "password": "pw"}
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "pw"}
         )
         self.assertRedirects(r, reverse("snap:camera", args=[self.ev.slug]))
         self.assertEqual(self.ev.guests.count(), 1)
+        g = self.ev.guests.get()
+        self.assertEqual(g.phone, "09123456789")
 
     def test_returning_guest_resumes_same_roll(self):
         # First visit, takes 2 photos.
         self.client.post(
-            self.url, {"name": "Ann", "email": "a@x.com", "password": "pw"}
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "pw"}
         )
         g = self.ev.guests.get()
         Photo.objects.create(guest=g, image=upload())
         Photo.objects.create(guest=g, image=upload())
-        # New browser (fresh client), same name+email → same guest, roll preserved.
+        # New browser (fresh client), same phone → same guest, roll preserved.
         c2 = Client()
-        c2.post(self.url, {"name": "Ann", "email": "a@x.com", "password": "pw"})
+        c2.post(self.url, {"name": "Ann", "phone": "09123456789", "password": "pw"})
         self.assertEqual(self.ev.guests.count(), 1)
         self.assertEqual(self.ev.guests.get().remaining, 1)
 
-    def test_new_name_starts_fresh_roll(self):
+    def test_phone_normalization(self):
+        # +98 country code normalizes to 09
         self.client.post(
-            self.url, {"name": "Ann", "email": "a@x.com", "password": "pw"}
+            self.url, {"name": "Ann", "phone": "+989123456789", "password": "pw"}
         )
-        Client().post(self.url, {"name": "Bob", "email": "b@x.com", "password": "pw"})
+        g = self.ev.guests.get()
+        self.assertEqual(g.phone, "09123456789")
+
+    def test_new_phone_starts_fresh_roll(self):
+        self.client.post(
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
+        Client().post(
+            self.url, {"name": "Bob", "phone": "09987654321", "password": "pw"}
+        )
         self.assertEqual(self.ev.guests.count(), 2)
 
     def test_join_blocked_when_ended(self):
         self.ev.end_at = timezone.now() - timedelta(minutes=1)
         self.ev.save()
-        r = self.client.post(self.url, {"name": "Ann", "password": "pw"})
+        r = self.client.post(
+            self.url, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
         self.assertEqual(r.status_code, 400)
 
 
@@ -210,12 +239,16 @@ class CameraViewTests(TestCase):
         self.assertRedirects(r, self.join)
 
     def test_renders_after_join(self):
-        self.client.post(self.join, {"name": "Ann", "password": "pw"})
+        self.client.post(
+            self.join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
         r = self.client.get(self.cam)
         self.assertEqual(r.status_code, 200)
 
     def test_redirects_to_done_when_roll_full(self):
-        self.client.post(self.join, {"name": "Ann", "password": "pw"})
+        self.client.post(
+            self.join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
         g = self.ev.guests.get()
         for _ in range(self.ev.roll_size):
             Photo.objects.create(guest=g, image=upload())
@@ -223,9 +256,7 @@ class CameraViewTests(TestCase):
         self.assertRedirects(r, reverse("snap:done", args=[self.ev.slug]))
 
 
-@override_settings(
-    APP_LANG="en", EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
-)
+@override_settings(APP_LANG="en")
 class CaptureViewTests(TestCase):
     def setUp(self):
         self.ev = make_event(password="pw", roll_size=2)
@@ -233,7 +264,7 @@ class CaptureViewTests(TestCase):
         self.cap = reverse("snap:capture", args=[self.ev.slug])
 
     def _join(self, client, **extra):
-        data = {"name": "Ann", "password": "pw"}
+        data = {"name": "Ann", "phone": "09123456789", "password": "pw"}
         data.update(extra)
         client.post(self.join, data)
 
@@ -280,85 +311,47 @@ class CaptureViewTests(TestCase):
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["error"], "ended")
 
-    def test_no_email_flag_on_roll_full(self):
-        # Emails now go out when the event ends, not when the roll fills.
-        self._join(self.client, email="a@x.com")
-        self.client.post(self.cap, {"image": upload()})
-        self.client.post(self.cap, {"image": upload()})  # fills roll
-        self.assertFalse(self.ev.guests.get().email_sent)
-
 
 class DoneViewTests(TestCase):
     @override_settings(APP_LANG="en")
     def test_done_renders(self):
         ev = make_event(password="pw")
         self.client.post(
-            reverse("snap:join", args=[ev.slug]), {"name": "Ann", "password": "pw"}
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
         )
         r = self.client.get(reverse("snap:done", args=[ev.slug]))
         self.assertEqual(r.status_code, 200)
 
 
 # --------------------------------------------------------------------------- #
-# Email
+# Phone normalization
 # --------------------------------------------------------------------------- #
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-class EmailTests(TestCase):
-    def test_send_attaches_all_photos(self):
-        ev = make_event(roll_size=3)
-        g = Guest.objects.create(event=ev, name="Ann", email="a@x.com")
-        for _ in range(3):
-            Photo.objects.create(guest=g, image=upload())
-        _send(g)
-        self.assertEqual(len(mail.outbox), 1)
-        msg = mail.outbox[0]
-        self.assertEqual(msg.to, ["a@x.com"])
-        self.assertEqual(len(msg.attachments), 3)
+class PhoneNormalizationTests(TestCase):
+    def test_canonical_09_passes_through(self):
+        self.assertEqual(normalize_phone("09123456789"), "09123456789")
 
-    def test_send_noop_without_photos(self):
-        ev = make_event()
-        g = Guest.objects.create(event=ev, name="Ann", email="a@x.com")
-        _send(g)
-        self.assertEqual(len(mail.outbox), 0)
+    def test_plus98_normalizes(self):
+        self.assertEqual(normalize_phone("+989123456789"), "09123456789")
 
+    def test_0098_normalizes(self):
+        self.assertEqual(normalize_phone("00989123456789"), "09123456789")
 
-@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-class SendEventEmailsCommandTests(TestCase):
-    def _ended_event_with_guest(self, email="a@x.com"):
-        ev = make_event(end_at=timezone.now() - timedelta(minutes=1))
-        g = Guest.objects.create(event=ev, name="Ann", email=email)
-        Photo.objects.create(guest=g, image=upload())
-        return ev, g
+    def test_bare_9_normalizes(self):
+        self.assertEqual(normalize_phone("9123456789"), "09123456789")
 
-    def test_emails_guests_of_ended_events(self):
-        ev, g = self._ended_event_with_guest()
-        call_command("send_event_emails")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["a@x.com"])
-        g.refresh_from_db()
-        self.assertTrue(g.email_sent)
+    def test_persian_digits_normalize(self):
+        self.assertEqual(normalize_phone("۰۹۱۲۳۴۵۶۷۸۹"), "09123456789")
 
-    def test_skips_guests_without_email(self):
-        ev = make_event(end_at=timezone.now() - timedelta(minutes=1))
-        g = Guest.objects.create(event=ev, name="Ann", email="")
-        Photo.objects.create(guest=g, image=upload())
-        call_command("send_event_emails")
-        self.assertEqual(len(mail.outbox), 0)
+    def test_separators_ignored(self):
+        self.assertEqual(normalize_phone("0912-345-6789"), "09123456789")
+        self.assertEqual(normalize_phone("0912 345 6789"), "09123456789")
 
-    def test_skips_events_not_yet_ended(self):
-        ev = make_event(end_at=timezone.now() + timedelta(hours=1))
-        g = Guest.objects.create(event=ev, name="Ann", email="a@x.com")
-        Photo.objects.create(guest=g, image=upload())
-        call_command("send_event_emails")
-        self.assertEqual(len(mail.outbox), 0)
-        g.refresh_from_db()
-        self.assertFalse(g.email_sent)
+    def test_too_short_rejected(self):
+        self.assertIsNone(normalize_phone("0912345"))
 
-    def test_does_not_resend_to_already_emailed(self):
-        ev, g = self._ended_event_with_guest()
-        call_command("send_event_emails")
-        call_command("send_event_emails")  # second run
-        self.assertEqual(len(mail.outbox), 1)
+    def test_invalid_format_rejected(self):
+        self.assertIsNone(normalize_phone("invalid"))
 
 
 # --------------------------------------------------------------------------- #
@@ -371,7 +364,7 @@ class AdminZipTests(TestCase):
         from .admin import download_all_photos
 
         ev = make_event(roll_size=2)
-        g = Guest.objects.create(event=ev, name="Ann")
+        g = Guest.objects.create(event=ev, name="Ann", phone="09123456789")
         Photo.objects.create(guest=g, image=upload())
         Photo.objects.create(guest=g, image=upload())
         resp = download_all_photos(None, None, Event.objects.filter(pk=ev.pk))
@@ -411,22 +404,22 @@ class I18nTests(TestCase):
         r = self.client.get(reverse("snap:join", args=[ev.slug]))
         self.assertContains(r, 'dir="ltr"')
 
-    def test_default_language_is_english(self):
-        """With no cookie, the site opens in English regardless of past default."""
-        r = self.client.get(reverse("landing"))
-        self.assertContains(r, 'dir="ltr"')
-        self.assertContains(r, 'lang="en"')
-
-    def test_ui_lang_cookie_overrides_to_persian(self):
-        self.client.cookies["ui_lang"] = "fa"
+    def test_default_language_is_persian(self):
+        """Guests are Persian-speaking, so with no cookie the site opens in fa."""
         r = self.client.get(reverse("landing"))
         self.assertContains(r, 'dir="rtl"')
         self.assertContains(r, 'lang="fa"')
 
+    def test_ui_lang_cookie_overrides_to_english(self):
+        self.client.cookies["ui_lang"] = "en"
+        r = self.client.get(reverse("landing"))
+        self.assertContains(r, 'dir="ltr"')
+        self.assertContains(r, 'lang="en"')
+
     def test_bogus_cookie_falls_back_to_default(self):
         self.client.cookies["ui_lang"] = "xx"
         r = self.client.get(reverse("landing"))
-        self.assertContains(r, 'lang="en"')
+        self.assertContains(r, 'lang="fa"')
 
     def test_set_language_sets_cookie_and_redirects(self):
         r = self.client.post(
