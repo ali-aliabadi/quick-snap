@@ -15,6 +15,6 @@ def ui_strings(request):
     """
     lang = request.COOKIES.get(LANG_COOKIE)
     if lang not in SUPPORTED_LANGS:
-        lang = getattr(settings, "APP_LANG", "en")
+        lang = getattr(settings, "APP_LANG", "fa")
     s = get_strings(lang)
     return {"t": s, "lang": s["lang"], "rtl": s["dir"] == "rtl"}

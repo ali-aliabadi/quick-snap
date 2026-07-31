@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -5,7 +6,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .context_processors import LANG_COOKIE, SUPPORTED_LANGS
+from .i18n import get_strings
 from .models import Event, Guest, Photo
+from .phones import normalize_phone
 
 SESSION_KEY = (
     "guest:{slug}"  # per-event guest token, so one browser can join many events
@@ -18,6 +21,28 @@ def _session_guest(request, event):
     if not token:
         return None
     return Guest.objects.filter(event=event, token=token).first()
+
+
+def _t(request):
+    """UI strings for this request — same language the templates get."""
+    lang = request.COOKIES.get(LANG_COOKIE)
+    if lang not in SUPPORTED_LANGS:
+        lang = getattr(settings, "APP_LANG", "fa")
+    return get_strings(lang)
+
+
+def _join_context(request, event, **extra):
+    """Join-page context. The `{n}` copy needs the roll size interpolated, and
+    both the GET and the validation-error render need it."""
+    t = _t(request)
+    n = str(event.roll_size)
+    ctx = {
+        "event": event,
+        "join_explain": t["join_explain"].replace("{n}", n),
+        "join_step_2": t["join_step_2"].replace("{n}", n),
+    }
+    ctx.update(extra)
+    return ctx
 
 
 @require_http_methods(["GET"])
@@ -77,34 +102,47 @@ def join(request, slug):
         return redirect("snap:camera", slug=slug)
 
     if request.method == "POST":
-        password = request.POST.get("password", "")
+        password = request.POST.get("password", "").strip()
         name = request.POST.get("name", "").strip()
-        email = request.POST.get("email", "").strip()
+        phone_raw = request.POST.get("phone", "").strip()
 
+        t = _t(request)
         errors = []
         if not event.is_active or event.has_ended:
-            errors.append("This event is closed.")
+            errors.append(t["err_event_closed"])
         if not name:
-            errors.append("Please enter your name.")
+            errors.append(t["err_name_required"])
+
+        phone = normalize_phone(phone_raw)
+        if not phone:
+            errors.append(t["err_phone_invalid"])
+
         if not event.check_password(password):
-            errors.append("Wrong event password.")
+            errors.append(t["err_wrong_password"])
 
         if errors:
             return render(
                 request,
                 "snap/join.html",
-                {"event": event, "errors": errors, "name": name, "email": email},
+                _join_context(
+                    request, event, errors=errors, name=name, phone=phone_raw
+                ),
                 status=400,
             )
 
-        # Resume an existing roll (same name+email) or start a fresh one.
+        # Resume an existing roll (same phone) or start a fresh one.
         guest, _created = Guest.objects.get_or_create(
-            event=event, name=name, email=email
+            event=event, phone=phone, defaults={"name": name}
         )
+        # If returning (not created), the name might have changed — update it.
+        if not _created and guest.name != name:
+            guest.name = name
+            guest.save(update_fields=["name"])
+
         request.session[SESSION_KEY.format(slug=event.slug)] = str(guest.token)
         return redirect("snap:camera", slug=slug)
 
-    return render(request, "snap/join.html", {"event": event})
+    return render(request, "snap/join.html", _join_context(request, event))
 
 
 @require_http_methods(["GET"])
@@ -152,8 +190,6 @@ def capture(request, slug):
 
     remaining = guest.remaining
     done = remaining == 0
-    # Emails are sent when the event ends (see the send_event_emails command),
-    # not when the roll fills — a guest may still have photos to take.
     return JsonResponse({"remaining": remaining, "done": done})
 
 

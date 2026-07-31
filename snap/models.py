@@ -57,16 +57,17 @@ class Event(models.Model):
 class Guest(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="guests")
     name = models.CharField(max_length=200)
-    email = models.EmailField(blank=True)
+    # Canonical `09xxxxxxxxx` (see snap.phones.normalize_phone). This is the roll
+    # identity: one roll per number per event, so a guest who loses their session
+    # cookie resumes by re-entering the same number.
+    phone = models.CharField(max_length=20, db_index=True)
     token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    email_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
-        # A returning guest (same name+email) resumes their roll instead of duplicating.
         constraints = [
             models.UniqueConstraint(
-                fields=["event", "name", "email"], name="unique_guest_per_event"
+                fields=["event", "phone"], name="unique_guest_phone_per_event"
             )
         ]
 

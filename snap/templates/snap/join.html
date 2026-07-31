@@ -2,14 +2,35 @@
 {% block title %}{{ event.name }} — Quick Snap{% endblock %}
 {% block head %}
 <style>
-  /* Countdown reads like a live readout — a slow amber pulse. */
+  .welcome-box { background:rgba(240,166,58,.08); border:1px solid rgba(240,166,58,.22);
+    border-radius:4px; padding:18px 20px; margin:20px 0; }
+  .welcome-box h2 { font-family:var(--font-display); font-size:1.4rem; margin:0 0 8px;
+    color:var(--ivory); font-weight:500; }
+  .welcome-box p { color:var(--muted); font-size:.92rem; line-height:1.5; margin:0; }
+  .steps { margin:22px 0; }
+  .steps h3 { font-family:var(--font-mono); font-size:.72rem; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--safelight); margin:0 0 14px; }
+  .steps ol { list-style:none; padding:0; margin:0; counter-reset:step; }
+  .steps li { counter-increment:step; position:relative; padding-left:38px; margin-bottom:12px;
+    color:var(--muted); font-size:.88rem; line-height:1.5; }
+  .steps li::before { content:counter(step); position:absolute; left:0; top:0;
+    width:26px; height:26px; border-radius:50%; background:var(--safelight-dim);
+    border:1px solid rgba(240,166,58,.35); color:var(--safelight);
+    font-family:var(--font-mono); font-size:.72rem; font-weight:700;
+    display:flex; align-items:center; justify-content:center; }
+  html[dir="rtl"] .steps li { padding-left:0; padding-right:38px; }
+  html[dir="rtl"] .steps li::before { left:auto; right:0; }
+  html[dir="rtl"] .steps h3 { letter-spacing:0; }
+  .form-title { font-family:var(--font-mono); font-size:.82rem; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--ivory); margin:22px 0 4px; }
+  html[dir="rtl"] .form-title { letter-spacing:0; }
+  .help { font-size:.78rem; color:var(--muted); margin:4px 0 0; line-height:1.4; }
   .countdown { animation:cd-pulse 2.4s ease-in-out infinite; }
   @keyframes cd-pulse {
     0%,100% { box-shadow:inset 2px 0 0 -1px var(--safelight); }
     50%     { box-shadow:inset 2px 0 0 -1px var(--safelight), 0 0 14px -2px var(--safelight-dim); }
   }
-  /* Inputs lift a touch when focused, on top of the base focus ring. */
-  input[type=text], input[type=email], input[type=password] { transition:border-color .15s, box-shadow .15s, transform .15s; }
+  input[type=text], input[type=tel], input[type=password] { transition:border-color .15s, box-shadow .15s, transform .15s; }
   input:focus { transform:translateY(-1px); }
   @media (prefers-reduced-motion:reduce){ .countdown{animation:none!important;} input:focus{transform:none!important;} }
 </style>
@@ -19,14 +40,18 @@
 <div class="stage">
   <div class="eyebrow">{{ t.join_eyebrow }}</div>
   <h1>{{ event.name }}</h1>
-  <p class="muted">{{ t.join_tagline }}</p>
 
-  <div class="spec">
-    <span><b>{{ event.roll_size }}</b> {{ t.spec_exposures }}</span>
-    <span class="dot">/</span>
-    <span>{{ t.spec_no_retakes }}</span>
-    <span class="dot">/</span>
-    <span>{{ t.spec_tap }}</span>
+  <div class="welcome-box">
+    <h2>{{ join_explain }}</h2>
+  </div>
+
+  <div class="steps">
+    <h3>{{ t.join_steps_title }}</h3>
+    <ol>
+      <li>{{ t.join_step_1 }}</li>
+      <li>{{ join_step_2 }}</li>
+      <li>{{ t.join_step_3 }}</li>
+    </ol>
   </div>
 
   {% if event.start_at or event.end_at %}
@@ -45,16 +70,23 @@
         <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
       </div>
     {% endif %}
+
+    <div class="form-title">{{ t.join_form_title }}</div>
+
     <form method="post" action="{% url 'snap:join' event.slug %}">
       {% csrf_token %}
       <label for="name">{{ t.label_name }}</label>
       <input id="name" name="name" type="text" value="{{ name|default:'' }}" required autocomplete="name">
 
-      <label for="email">{{ t.label_email }}</label>
-      <input id="email" name="email" type="email" value="{{ email|default:'' }}" autocomplete="email">
+      <label for="phone">{{ t.label_phone }}</label>
+      <input id="phone" name="phone" type="tel" value="{{ phone|default:'' }}" required
+             autocomplete="tel" inputmode="numeric"
+             placeholder="{% if lang == 'fa' %}۰۹۱۲۳۴۵۶۷۸۹{% else %}09123456789{% endif %}">
+      <div class="help">{{ t.join_phone_help }}</div>
 
       <label for="password">{{ t.label_password }}</label>
       <input id="password" name="password" type="password" required>
+      <div class="help">{{ t.join_password_help }}</div>
 
       <button type="submit">{{ t.btn_load }}</button>
     </form>

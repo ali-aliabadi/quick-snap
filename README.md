@@ -1,10 +1,10 @@
 # Quick Snap
 
 QR-driven "disposable camera" webapp for events. A guest scans a QR code, enters the
-event password + their name (email optional), then gets a fixed roll of **N instant
-photos** — tap to snap, no review, no retake. When the roll fills up, if they gave an
-email, they're emailed their own photos. The host collects **all** photos centrally.
-Multiple events are supported, each with its own password and roll size.
+event password + their name and phone number, then gets a fixed roll of **N instant
+photos** — tap to snap or pick from gallery, no review, no retake. The host collects
+**all** photos centrally. Multiple events are supported, each with its own password
+and roll size.
 
 Stack: Django + uv, SQLite metadata, photos to **local disk (dev)** or **S3 (prod)**,
 live browser camera via `getUserMedia`.
@@ -12,12 +12,12 @@ live browser camera via `getUserMedia`.
 ## Guest flow
 
 1. Scan QR → `/e/<slug>/`
-2. Enter event password + name (+ optional email)
-3. Live camera opens → tap to snap, up to N photos, no retakes
-4. Roll full → thank-you page; if email given, photos are emailed as attachments
+2. Enter event password + name + phone number
+3. Live camera opens → tap to snap or pick from gallery, up to N photos, no retakes
+4. Roll full → thank-you page; photos are collected by the host
 
 Returning guests: sessions live 8h and, if the cookie is lost, re-entering the **same
-name + email** resumes the same roll instead of starting over — safe across a long event.
+phone number** resumes the same roll instead of starting over — safe across a long event.
 
 ## Scheduling (optional start / end times)
 
@@ -30,7 +30,7 @@ end. Leave both blank for an always-open event.
 
 ```bash
 uv sync                                   # install deps into .venv
-cp .env.example .env                      # defaults are dev-ready (local storage, console email)
+cp .env.example .env                      # defaults are dev-ready (local storage)
 uv run manage.py migrate
 uv run manage.py createsuperuser
 uv run manage.py runserver
@@ -44,7 +44,7 @@ http://localhost:8000/e/<slug>/
 ```
 
 Use `localhost` (not `127.0.0.1`) — browsers treat `localhost` as a **secure context**,
-so the camera works without HTTPS in dev. Email prints to the terminal (console backend).
+so the camera works without HTTPS in dev.
 
 ## Creating a QR code
 
@@ -58,7 +58,6 @@ QR generator and print it for the event.
    - `DEBUG=False`, `SECRET_KEY=<random>`, `ALLOWED_HOSTS=snap.yourdomain.com`
    - `CSRF_TRUSTED_ORIGINS=https://snap.yourdomain.com`
    - `USE_S3=True` + your S3 credentials/bucket
-   - SMTP email settings (`EMAIL_BACKEND=...smtp...`, host, user, password)
 3. Build + migrate:
    ```bash
    uv sync
@@ -66,7 +65,7 @@ QR generator and print it for the event.
    uv run manage.py collectstatic --noinput
    uv run manage.py createsuperuser
    ```
-4. Reverse proxy + HTTPS with **Caddy** (`deploy/Caddyfile`) — required for the camera.
+4. Reverse proxy + HTTPS with **nginx** (`deploy/nginx-quicksnap.conf`) — required for the camera.
 5. Run gunicorn via **systemd** (`deploy/quicksnap.service`).
 
 ## Collecting photos (host)
@@ -78,5 +77,6 @@ QR generator and print it for the event.
 ## Configuration reference
 
 See `.env.example` — every setting is env-driven (secret key, hosts, database, storage
-backend, email). The `USE_S3` flag alone switches photo storage between local disk and S3.
+backend, UI language). The `USE_S3` flag alone switches photo storage between local
+disk and S3. `APP_LANG` sets the default UI language (`fa` default, or `en`).
 

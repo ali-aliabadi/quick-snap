@@ -115,9 +115,9 @@ class EventAdmin(admin.ModelAdmin):
 
 @admin.register(Guest)
 class GuestAdmin(admin.ModelAdmin):
-    list_display = ["name", "email", "event", "taken", "email_sent", "created_at"]
-    list_filter = ["event", "email_sent"]
-    search_fields = ["name", "email"]
+    list_display = ["name", "phone", "event", "taken", "created_at"]
+    list_filter = ["event"]
+    search_fields = ["name", "phone"]
     inlines = [PhotoInline]
     readonly_fields = ["token", "created_at"]
 

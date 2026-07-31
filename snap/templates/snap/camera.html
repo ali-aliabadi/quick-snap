@@ -76,19 +76,47 @@
     .shutter-row {
       display:flex; align-items:center; justify-content:center;
     }
-    /* mechanical shutter release — the one red thing in the whole app */
+    /* Shutter release: white ring + white fill — the universal *photo* button.
+       Deliberately NOT red: a red circle reads as "recording video", and guests
+       kept asking whether this app was filming them. */
     #snap {
-      width:78px; height:78px; border-radius:50%; border:3px solid rgba(243,234,217,.85);
-      background:var(--shutter); cursor:pointer; padding:0;
-      box-shadow:0 0 0 6px rgba(0,0,0,.35), inset 0 -3px 8px rgba(0,0,0,.4);
+      width:78px; height:78px; border-radius:50%; padding:0; cursor:pointer;
+      background:transparent; border:3px solid rgba(243,234,217,.9);
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:0 0 0 5px rgba(0,0,0,.3);
       transition:transform .07s;
     }
-    #snap:active { transform:scale(.86); }
+    /* the inner disc is the "film" — solid ivory, like every phone camera */
+    #snap::after {
+      content:""; width:60px; height:60px; border-radius:50%;
+      background:var(--ivory);
+      box-shadow:inset 0 -2px 6px rgba(0,0,0,.18);
+      transition:transform .07s, background .15s;
+    }
+    #snap:active { transform:scale(.94); }
+    #snap:active::after { transform:scale(.88); }
     #snap.recoil { animation:recoil .28s cubic-bezier(.2,.8,.2,1); }
-    @keyframes recoil { 0%{ transform:scale(.86); } 55%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
-    #snap:disabled { background:#5a4b40; border-color:rgba(243,234,217,.35); }
+    @keyframes recoil { 0%{ transform:scale(.9); } 55%{ transform:scale(1.05); } 100%{ transform:scale(1); } }
+    #snap:disabled { border-color:rgba(243,234,217,.3); }
+    #snap:disabled::after { background:#6b5c50; }
     #hint { color:rgba(243,234,217,.72); font-size:.64rem; letter-spacing:.22em;
-      text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+      text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.7); text-align:center;
+      padding:0 24px; }
+    html[dir="rtl"] #hint { letter-spacing:0; text-transform:none; font-size:.8rem; }
+
+    /* Gallery picker — mirrors the flip button on the opposite side */
+    #gallery {
+      position:absolute; left:28px; bottom:calc(env(safe-area-inset-bottom) + 47px);
+      width:52px; height:52px; border-radius:50%;
+      background:rgba(14,10,7,.72); color:var(--ivory); border:1px solid rgba(243,234,217,.22);
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      backdrop-filter:blur(8px); transition:transform .15s, background .15s; padding:0;
+    }
+    html[dir="rtl"] #gallery { left:auto; right:28px; }
+    #gallery:active { transform:scale(.92); background:rgba(14,10,7,.9); }
+    #gallery svg { width:23px; height:23px; }
+    #gallery:disabled { opacity:.45; }
+    #file { display:none; }
 
     /* gate + overlay share the darkroom look */
     #gate, #overlay {
@@ -181,6 +209,16 @@
       <button id="snap" type="button" aria-label="Take photo"></button>
     </div>
     <div id="hint">{{ t.tap_expose }}</div>
+    <button id="gallery" type="button" aria-label="{{ t.gallery }}" title="{{ t.gallery }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+    </button>
+    <!-- No `capture` attribute: that would force the camera and defeat the
+         whole point of letting guests pick an existing photo. -->
+    <input type="file" id="file" accept="image/*">
     <button id="switch" type="button" aria-label="{{ t.flip }}" title="{{ t.flip }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 8a8 8 0 00-14-3M4 5v3h3"/>
@@ -236,6 +274,8 @@
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
     const snap = document.getElementById("snap");
+    const galleryBtn = document.getElementById("gallery");
+    const fileInput = document.getElementById("file");
     const flash = document.getElementById("flash");
     const counterNum = document.querySelector("#counter .num");
     const endcd = document.getElementById("endcd");
@@ -277,9 +317,10 @@
         document.getElementById("gate-msg").textContent = T.gate;
         gateCd.textContent = fmt(startAt - now);
         snap.disabled = true;
+        galleryBtn.disabled = true;
       } else {
         gate.classList.remove("show");
-        if (!busy && !ended()) snap.disabled = false;
+        if (!busy && !ended()) { snap.disabled = false; galleryBtn.disabled = false; }
       }
       if (endAt) {
         if (ended()) { window.location = DONE_URL; return; }
@@ -417,10 +458,45 @@
       });
     }
 
+    function setBusy(on) {
+      busy = on;
+      snap.disabled = on;
+      galleryBtn.disabled = on;
+    }
+
+    /* Upload one blob and reconcile the roll counter. Shared by the live
+       shutter and the gallery picker so both consume the same roll. */
+    async function submitBlob(blob) {
+      setProgress(0);             // start of upload
+
+      // One automatic retry on network blip or timeout.
+      let res;
+      try {
+        res = await uploadBlob(blob);
+      } catch (e) {
+        setProgress(null);        // indeterminate while retrying
+        res = await uploadBlob(blob);
+      }
+
+      if (res.status === 409) { window.location = DONE_URL; return; }
+      if (res.status === 403) {
+        let d = {};
+        try { d = JSON.parse(res.text); } catch (e) {}
+        if (d.error === "ended" || d.error === "closed") { window.location = DONE_URL; return; }
+        tickClocks();
+        return;
+      }
+      if (res.status < 200 || res.status >= 300) throw new Error("upload failed");
+      const data = JSON.parse(res.text);
+      remaining = data.remaining;
+      renderCounter(true);
+      if (data.done) { window.location = DONE_URL; return; }
+    }
+
     async function takePhoto() {
       if (busy || remaining <= 0 || !stream) return;
       if (!started() || ended()) return;
-      busy = true; snap.disabled = true;
+      setBusy(true);
 
       flash.classList.remove("fire"); void flash.offsetWidth; flash.classList.add("fire");
       snap.classList.remove("recoil"); void snap.offsetWidth; snap.classList.add("recoil");
@@ -428,40 +504,45 @@
       sending.classList.add("show");
 
       try {
-        const blob = await grabBlob();
-        setProgress(0);             // start of upload
-
-        // One automatic retry on network blip or timeout.
-        let res;
-        try {
-          res = await uploadBlob(blob);
-        } catch (e) {
-          setProgress(null);        // indeterminate while retrying
-          res = await uploadBlob(blob);
-        }
-
-        if (res.status === 409) { window.location = DONE_URL; return; }
-        if (res.status === 403) {
-          let d = {};
-          try { d = JSON.parse(res.text); } catch (e) {}
-          if (d.error === "ended" || d.error === "closed") { window.location = DONE_URL; return; }
-          tickClocks();
-          return;
-        }
-        if (res.status < 200 || res.status >= 300) throw new Error("upload failed");
-        const data = JSON.parse(res.text);
-        remaining = data.remaining;
-        renderCounter(true);
-        if (data.done) { window.location = DONE_URL; return; }
+        await submitBlob(await grabBlob());
       } catch (e) {
         showOverlay(T.upErr, true);
       } finally {
         sending.classList.remove("show");
-        busy = false; snap.disabled = false;
+        setBusy(false);
+      }
+    }
+
+    /* Gallery pick: re-encode through the same canvas path as a live shot so
+       huge originals get scaled/compressed identically, then upload. Counts
+       against the roll exactly like a snap — the server enforces the cap. */
+    async function usePickedFile(file) {
+      if (busy || remaining <= 0 || !file) return;
+      if (!started() || ended()) return;
+      setBusy(true);
+      setProgress(null);
+      sending.classList.add("show");
+
+      try {
+        const bmp = await createImageBitmap(file);
+        const blob = await encode(bmp, bmp.width, bmp.height, false);
+        if (bmp.close) bmp.close();
+        await submitBlob(blob);
+      } catch (e) {
+        showOverlay(T.upErr, true);
+      } finally {
+        sending.classList.remove("show");
+        setBusy(false);
       }
     }
 
     snap.addEventListener("click", takePhoto);
+    galleryBtn.addEventListener("click", () => { if (!busy) fileInput.click(); });
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";   // let the same file be picked again later
+      if (file) usePickedFile(file);
+    });
     document.getElementById("switch").addEventListener("click", () => {
       facing = facing === "environment" ? "user" : "environment";
       video.style.transform = facing === "user" ? "scaleX(-1)" : "none";
