@@ -10,6 +10,7 @@ dependencies = [
     "boto3>=1.34",
     "django-environ>=0.11",
     "gunicorn>=22.0",
+    "prometheus-client>=0.20",
 ]
 
 [tool.uv]

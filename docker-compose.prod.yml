@@ -1,9 +1,18 @@
-# Production stack: Django (gunicorn) only. TLS + :80/:443 are handled by the
-# host's existing nginx (this is a shared VPS), which reverse-proxies to the
-# localhost port below. Cloudflare sits in front and terminates public TLS.
+# Production stack: Django (gunicorn) + a self-contained monitoring stack.
+# TLS + :80/:443 are handled by the host's existing nginx (this is a shared VPS),
+# which reverse-proxies to the localhost ports below. Cloudflare sits in front
+# and terminates public TLS.
 #
 # nginx vhost: deploy/nginx-quicksnap.conf  ->  proxies to 127.0.0.1:8010
 # Static/media are bind-mounted to host paths so nginx can serve them directly.
+#
+# Monitoring: prometheus (scrape + store), node-exporter (VPS health),
+# cadvisor (per-container health), grafana (dashboards). All bound to loopback;
+# nginx publishes only Grafana, at /grafana/.
+#
+# IMPORTANT: deploy/deploy.sh applies this file on every push to master. No
+# monitoring service is a dependency of `web`, so if monitoring fails to start
+# the site keeps serving guests.
 
 services:
   web:
@@ -13,6 +22,11 @@ services:
     environment:
       # Persist SQLite on the db_data volume (4 slashes = absolute path).
       - DATABASE_URL=sqlite:////app/data/db.sqlite3
+      # gunicorn runs several workers, each holding its own metrics in memory.
+      # This directory is where they pool counters so one scrape sees all of
+      # them; entrypoint.sh wipes it on boot, because files left by dead
+      # workers would otherwise be counted forever.
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prom
     ports:
       # Bind to loopback only — never exposed publicly; nginx proxies to it.
       - "127.0.0.1:8010:8000"
@@ -22,5 +36,90 @@ services:
       - ./media:/app/media
       - ./staticfiles:/app/staticfiles
 
+  # ---- Monitoring ---------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 15d of a handful of targets at 15s is well under a GB.
+      - --storage.tsdb.retention.time=15d
+      - --web.external-url=/prometheus/
+    env_file: .env
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Bearer token for the app scrape. Prometheus does not expand env vars in
+      # its config, so deploy.sh materialises this file from METRICS_TOKEN.
+      - ./deploy/monitoring/.metrics_token:/etc/prometheus/metrics_token:ro
+      - prom_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      # Lets Prometheus reach the app on the host's loopback binding, the same
+      # path nginx uses. Linux needs this mapped explicitly.
+      - "host.docker.internal:host-gateway"
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    # VPS-level truth (CPU, memory, disk, network, load) has to be read from
+    # the host's own namespaces, not the container's.
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run/credentials)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "127.0.0.1:9100:9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    # Per-container CPU/memory — this is how you tell whether it's Quick Snap
+    # or a neighbour (eid_web, v2ray) eating the box.
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Served under a subpath by nginx, so Grafana must know its own root.
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN:-alialiabadi.ir}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # No default admin password on purpose: this UI is published to the
+      # internet, so the deploy must fail loudly rather than boot with
+      # admin/admin. `:?` makes compose refuse to start without it.
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      # Public instance: no sign-ups, no anonymous read, no phoning home.
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_SECURITY_COOKIE_SECURE=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   db_data:
+  prom_data:
+  grafana_data:

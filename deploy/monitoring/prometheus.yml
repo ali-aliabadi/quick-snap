@@ -1,0 +1,41 @@
+# Prometheus scrape config for the Quick Snap VPS.
+#
+# Four targets:
+#   quicksnap     — the Django app's own metrics (see snap/metrics.py)
+#   node          — the VPS itself: CPU, memory, disk, network, load
+#   cadvisor      — per-container resource use, incl. neighbour services
+#   prometheus    — self-monitoring, so you can tell if scraping itself broke
+#
+# 15s is frequent enough to watch a live event without generating much data.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    host: german-vps
+
+scrape_configs:
+  - job_name: quicksnap
+    # The app is bound to the host's loopback (127.0.0.1:8010), reachable from
+    # this container via the host-gateway alias set in docker-compose.
+    static_configs:
+      - targets: ["host.docker.internal:8010"]
+    # /metrics is token-gated (it exposes guest counts and event slugs), so the
+    # scrape authenticates. METRICS_TOKEN comes from .env via env_file.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    # A scrape walks the media tree, so give it room on a slow disk.
+    scrape_timeout: 10s
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,16 @@
+# Load dashboard JSON from disk on boot.
+apiVersion: 1
+
+providers:
+  - name: quicksnap
+    orgId: 1
+    folder: Quick Snap
+    type: file
+    # Dashboards are code: edits in the UI are overwritten on restart, so change
+    # the JSON in deploy/monitoring/grafana/dashboards/ instead.
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

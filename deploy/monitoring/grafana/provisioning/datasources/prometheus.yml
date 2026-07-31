@@ -1,0 +1,16 @@
+# Grafana datasource provisioning — created on first boot, no clicking required.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Service name on the compose network.
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      # Must match prometheus.yml's scrape_interval so Grafana's $__rate_interval
+      # lands on a sane multiple and rate() queries aren't sparse.
+      timeInterval: 15s
+      httpMethod: POST
+    editable: false

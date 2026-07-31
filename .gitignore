@@ -11,6 +11,8 @@ db.sqlite3-journal
 
 # Secrets
 .env
+# Prometheus scrape credential, generated on the VPS by deploy/deploy.sh.
+deploy/monitoring/.metrics_token
 # Local Claude settings — may hold ANTHROPIC_AUTH_TOKEN etc.
 .claude/settings.json
 

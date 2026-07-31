@@ -24,9 +24,15 @@
       font-family:var(--ui); -webkit-text-size-adjust:100%;
       overscroll-behavior:none; -webkit-tap-highlight-color:transparent; }
     /* Video + zoom: the preview fills the screen and can be scaled for zoom.
-       The transform-origin stays center so pinch-to-zoom feels natural. */
+       The transform-origin stays center so pinch-to-zoom feels natural.
+
+       pointer-events:none is load-bearing: on iOS a <video> is tappable and a
+       stray tap pauses it, leaving the guest staring at a frozen viewfinder
+       with no obvious way back. Taps must fall through to the page (which is
+       also where the pinch handler lives). */
     #video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; background:#000;
-      transform-origin:center; transition:transform .08s ease-out; }
+      transform-origin:center; transition:transform .08s ease-out;
+      pointer-events:none; }
     #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
     #flash.fire { animation:flash .18s ease-out; }
     @keyframes flash { 0%{opacity:.92} 100%{opacity:0} }
@@ -78,42 +84,33 @@
       backdrop-filter:blur(8px); transition:transform .15s, background .15s;
     }
     html[dir="rtl"] #switch { right:auto; left:28px; }
+    /* display:flex above would defeat the `hidden` attribute on its own. */
+    #switch[hidden] { display:none; }
     #switch:active { transform:scale(.92); background:rgba(14,10,7,.9); }
     #switch svg { width:24px; height:24px; }
 
-    /* Zoom controls: + button overlays the counter, slider when zooming actively */
-    #zoom-btn {
-      position:fixed; top:calc(env(safe-area-inset-top) + 16px); right:16px;
-      width:40px; height:40px; border-radius:50%;
-      background:rgba(14,10,7,.72); border:1px solid rgba(243,234,217,.22);
-      color:var(--ivory); backdrop-filter:blur(8px);
-      display:flex; align-items:center; justify-content:center; cursor:pointer;
-      font-size:1.4rem; font-weight:700; line-height:1; user-select:none;
-      transition:transform .15s, background .15s;
+    /* Zoom readout. Pinch is the gesture — this is only the indicator, exactly
+       like the phone camera app: it appears while you're zooming and fades out
+       after. Tapping it snaps back to 1x. It is NOT a slider; a slider on a
+       viewfinder means one thumb is busy holding a control instead of framing.
+       Hidden at 1x so the default view is uncluttered. */
+    #zoom-pill {
+      position:fixed; left:50%; transform:translateX(-50%) scale(.85);
+      bottom:calc(env(safe-area-inset-bottom) + 158px);
+      min-width:56px; padding:7px 15px; border-radius:100px;
+      background:rgba(14,10,7,.72); border:1px solid rgba(240,166,58,.45);
+      color:var(--safelight); backdrop-filter:blur(8px);
+      font-family:var(--ui); font-size:.9rem; font-weight:700; line-height:1;
+      font-variant-numeric:tabular-nums; text-align:center; cursor:pointer;
+      opacity:0; pointer-events:none; user-select:none;
+      box-shadow:0 0 18px rgba(240,166,58,.18);
+      transition:opacity .2s, transform .2s;
     }
-    html[dir="rtl"] #zoom-btn { right:auto; left:16px; }
-    #zoom-btn:active { transform:scale(.92); background:rgba(14,10,7,.9); }
-    #zoom-btn:disabled { opacity:.45; cursor:default; }
-    #zoom-slider {
-      position:fixed; top:calc(env(safe-area-inset-top) + 64px); right:16px;
-      width:40px; height:0; opacity:0; pointer-events:none;
-      background:rgba(14,10,7,.82); border:1px solid rgba(243,234,217,.28);
-      border-radius:20px; backdrop-filter:blur(8px);
-      display:flex; flex-direction:column; align-items:center;
-      padding:12px 0; transition:height .25s, opacity .25s, padding .25s;
+    /* .live = actively pinching, .held = lingering after the gesture ends */
+    #zoom-pill.live, #zoom-pill.held {
+      opacity:1; transform:translateX(-50%) scale(1); pointer-events:auto;
     }
-    html[dir="rtl"] #zoom-slider { right:auto; left:16px; }
-    #zoom-slider.show { height:160px; opacity:1; pointer-events:auto; }
-    #zoom-track {
-      flex:1; width:4px; background:rgba(243,234,217,.18); border-radius:2px;
-      position:relative; cursor:pointer;
-    }
-    #zoom-thumb {
-      position:absolute; left:50%; transform:translateX(-50%); width:18px; height:18px;
-      border-radius:50%; background:var(--safelight); border:2px solid rgba(14,10,7,.9);
-      box-shadow:0 0 8px rgba(240,166,58,.45); cursor:grab; touch-action:none;
-    }
-    #zoom-thumb:active { cursor:grabbing; }
+    #zoom-pill:active { transform:translateX(-50%) scale(.92); }
 
     .controls {
       position:fixed; left:0; right:0; bottom:0; display:flex; flex-direction:column;
@@ -228,11 +225,32 @@
       font-family:var(--ui);
     }
     html[dir="rtl"] .send-label { letter-spacing:0; text-transform:none; font-size:.84rem; }
+
+    /* Time remaining, under the ring. Deliberately quiet — it's reassurance,
+       not the main event, and it must not jitter as the estimate settles. */
+    #eta {
+      margin-top:-12px; min-height:1.2em; color:rgba(243,234,217,.6);
+      font-family:var(--ui); font-size:.78rem; letter-spacing:.04em;
+      font-variant-numeric:tabular-nums; text-align:center;
+    }
+    /* Cancel: a way out of a stalled upload on venue wifi. Understated so it
+       never competes with the progress ring, but a full-size tap target. */
+    #cancel-upload {
+      margin-top:6px; padding:12px 26px; min-height:44px;
+      border-radius:100px; cursor:pointer;
+      background:transparent; border:1px solid rgba(243,234,217,.3);
+      color:rgba(243,234,217,.82); font-family:var(--ui);
+      font-size:.78rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+      transition:background .15s, border-color .15s, transform .1s, opacity .15s;
+    }
+    html[dir="rtl"] #cancel-upload { letter-spacing:0; text-transform:none; font-size:.9rem; }
+    #cancel-upload:active { transform:scale(.96); background:rgba(243,234,217,.1); }
+    #cancel-upload:disabled { opacity:.35; cursor:default; }
     html[dir="rtl"] #counter .lab { letter-spacing:0; text-transform:none; font-size:.72rem; }
     html[dir="rtl"] #endcd { letter-spacing:0; text-transform:none; font-size:.76rem; }
 
     @media (prefers-reduced-motion:reduce) {
-      #snap, #flash, #counter .num, #gate-cd, #video, #zoom-slider { transition:none; animation:none; }
+      #snap, #flash, #counter .num, #gate-cd, #video, #zoom-pill { transition:none; animation:none; }
     }
   </style>
 </head>
@@ -247,22 +265,27 @@
   data-t-closes="{{ t.cd_closes }}"
   data-t-gate="{{ t.gate_opens }}"
   data-t-camerr="{{ t.cam_err }}"
-  data-t-uperr="{{ t.upload_err }}">
+  data-t-uperr="{{ t.upload_err }}"
+  data-t-etacalc="{{ t.eta_calc }}"
+  data-t-etasecs="{{ t.eta_secs }}"
+  data-t-etamin="{{ t.eta_min }}"
+  data-t-etamins="{{ t.eta_mins }}"
+  data-t-etafin="{{ t.eta_finishing }}"
+  data-t-cancelled="{{ t.upload_cancelled }}">
 
-  <video id="video" playsinline autoplay muted></video>
+  <!-- disablepictureinpicture / controlslist keep iOS from offering PiP or a
+       control overlay on long-press; a viewfinder is not a media player. -->
+  <video id="video" playsinline autoplay muted
+         disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback"
+         tabindex="-1"></video>
   <div id="flash"></div>
   <div class="brackets"><i></i></div>
 
   <div id="counter"><span class="num">0</span><span class="lab">{{ t.exp_left }}</span></div>
   <div id="endcd"></div>
 
-  <!-- Zoom controls: + button always visible, slider when active -->
-  <button id="zoom-btn" type="button" aria-label="{{ t.zoom }}" title="{{ t.zoom }}">+</button>
-  <div id="zoom-slider">
-    <div id="zoom-track">
-      <div id="zoom-thumb"></div>
-    </div>
-  </div>
+  <!-- Zoom readout. Pinch anywhere on the preview drives it; tap to reset. -->
+  <button id="zoom-pill" type="button" aria-label="{{ t.zoom }}" title="{{ t.zoom }}">1x</button>
 
   <div class="controls">
     <div class="shutter-row">
@@ -279,7 +302,10 @@
     <!-- No `capture` attribute: that would force the camera and defeat the
          whole point of letting guests pick an existing photo. -->
     <input type="file" id="file" accept="image/*">
-    <button id="switch" type="button" aria-label="{{ t.flip }}" title="{{ t.flip }}">
+    <!-- Hidden until a successful getUserMedia proves there's a second camera:
+         device labels and ids are withheld before permission, so we cannot know
+         the camera count up front. -->
+    <button id="switch" type="button" hidden aria-label="{{ t.flip }}" title="{{ t.flip }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 8a8 8 0 00-14-3M4 5v3h3"/>
         <path d="M4 16a8 8 0 0014 3M20 19v-3h-3"/>
@@ -296,6 +322,9 @@
       <div class="pct"><span id="pct-num">0</span><i>%</i></div>
     </div>
     <div class="send-label">{{ t.cam_sending }}</div>
+    <!-- aria-live so the estimate is announced as it settles, but politely -->
+    <div id="eta" aria-live="polite">{{ t.eta_calc }}</div>
+    <button id="cancel-upload" type="button">{{ t.cancel }}</button>
   </div>
 
   <div id="gate">
@@ -324,6 +353,9 @@
     const T = {
       closes: body.dataset.tCloses, gate: body.dataset.tGate,
       camErr: body.dataset.tCamerr, upErr: body.dataset.tUperr,
+      etaCalc: body.dataset.tEtacalc, etaSecs: body.dataset.tEtasecs,
+      etaMin: body.dataset.tEtamin, etaMins: body.dataset.tEtamins,
+      etaFin: body.dataset.tEtafin, cancelled: body.dataset.tCancelled,
     };
     const faDigit = s => fa ? s.replace(/[0-9]/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]) : s;
     let facing = "environment";
@@ -347,10 +379,10 @@
     const pctNum = document.getElementById("pct-num");
     const overlay = document.getElementById("overlay");
     const overlayMsg = document.getElementById("overlay-msg");
-    const zoomBtn = document.getElementById("zoom-btn");
-    const zoomSlider = document.getElementById("zoom-slider");
-    const zoomTrack = document.getElementById("zoom-track");
-    const zoomThumb = document.getElementById("zoom-thumb");
+    const zoomPill = document.getElementById("zoom-pill");
+    const switchBtn = document.getElementById("switch");
+    const etaEl = document.getElementById("eta");
+    const cancelBtn = document.getElementById("cancel-upload");
     const csrf = document.querySelector("input[name=csrfmiddlewaretoken]").value;
 
     /* ---------------------------------------------------------------- *
@@ -395,8 +427,19 @@
       return Math.max(zoomCaps.min, Math.min(zoomCaps.max, v));
     }
 
+    /* Is the current camera front-facing? Once we're cycling by deviceId,
+       `facing` is just what we *asked* for and may not be what we got, so
+       trust the track's own report and only fall back to the request. */
+    function isFrontFacing() {
+      const s = track && track.getSettings ? track.getSettings() : {};
+      if (s.facingMode) return s.facingMode === "user";
+      return facing === "user";
+    }
+
+    function applyMirror() { applyZoom(); }   // zoom owns the transform
+
     function applyZoom() {
-      const mirror = facing === "user" ? " scaleX(-1)" : "";
+      const mirror = isFrontFacing() ? " scaleX(-1)" : "";
       if (zoomCaps) {
         // Sensor zoom: preview needs no CSS scale, the frames arrive zoomed.
         video.style.transform = mirror.trim() || "none";
@@ -417,11 +460,8 @@
     }
 
     function renderZoom() {
-      zoomBtn.textContent = zoom > 1.05 ? faDigit(zoom.toFixed(1)) + "x" : "+";
-      const frac = zoomMax > 1 ? (zoom - 1) / (zoomMax - 1) : 0;
-      // Slider is vertical, bottom = 1x, top = max
-      zoomThumb.style.bottom = "calc(" + (frac * 100) + "% - 9px)";
-      zoomBtn.setAttribute("aria-valuenow", zoom.toFixed(1));
+      zoomPill.textContent = faDigit(zoom.toFixed(1)) + "x";
+      zoomPill.setAttribute("aria-valuenow", zoom.toFixed(1));
     }
 
     function setZoom(z) {
@@ -436,57 +476,40 @@
       applyZoom();
     }
 
-    /* --- Slider: tap or drag anywhere on the track --- */
-    let sliderHideTimer = null;
+    /* --- Zoom readout visibility ---
+       .live while the fingers are down, then .held for a moment after, so the
+       final value is readable before it fades. Never shown at 1x. */
+    let pillHideTimer = null;
 
-    function showSlider() {
-      zoomSlider.classList.add("show");
-      clearTimeout(sliderHideTimer);
-      sliderHideTimer = setTimeout(() => zoomSlider.classList.remove("show"), 4000);
+    function showPill(live) {
+      clearTimeout(pillHideTimer);
+      if (zoom <= 1.001) {                 // back to wide: nothing to report
+        zoomPill.classList.remove("live", "held");
+        return;
+      }
+      zoomPill.classList.toggle("live", !!live);
+      zoomPill.classList.add("held");
+      if (!live) pillHideTimer = setTimeout(() => zoomPill.classList.remove("held"), 1400);
     }
 
-    function zoomFromPointer(clientY) {
-      const r = zoomTrack.getBoundingClientRect();
-      if (!r.height) return;
-      // Bottom of the track is 1x, top is zoomMax.
-      const frac = 1 - (clientY - r.top) / r.height;
-      setZoom(1 + Math.max(0, Math.min(1, frac)) * (zoomMax - 1));
-      showSlider();
-    }
+    zoomPill.addEventListener("click", () => { resetZoom(); showPill(false); });
 
-    zoomBtn.addEventListener("click", () => {
-      if (zoomSlider.classList.contains("show") && zoom > 1.05) resetZoom();
-      showSlider();
-    });
-
-    let dragging = false;
-    zoomTrack.addEventListener("pointerdown", (e) => {
-      dragging = true;
-      zoomTrack.setPointerCapture && zoomTrack.setPointerCapture(e.pointerId);
-      zoomFromPointer(e.clientY);
-      e.preventDefault();
-    });
-    zoomTrack.addEventListener("pointermove", (e) => {
-      if (dragging) { zoomFromPointer(e.clientY); e.preventDefault(); }
-    });
-    zoomTrack.addEventListener("pointerup", () => { dragging = false; });
-    zoomTrack.addEventListener("pointercancel", () => { dragging = false; });
-
-    /* --- Pinch to zoom on the preview itself --- */
+    /* --- Pinch: the gesture people already know from the camera app ---
+       Tracked continuously against the distance at gesture start, so zoom
+       follows the fingers 1:1 and survives a finger being lifted and replaced
+       (that restarts the baseline rather than jumping). */
     let pinchStartDist = 0;
     let pinchStartZoom = 1;
 
     function touchDist(t) {
-      const dx = t[0].clientX - t[1].clientX;
-      const dy = t[0].clientY - t[1].clientY;
-      return Math.hypot(dx, dy);
+      return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     }
 
     document.addEventListener("touchstart", (e) => {
       if (e.touches.length === 2) {
         pinchStartDist = touchDist(e.touches);
         pinchStartZoom = zoom;
-        showSlider();
+        showPill(true);
       }
     }, { passive: true });
 
@@ -494,19 +517,26 @@
       if (e.touches.length === 2 && pinchStartDist > 0) {
         e.preventDefault();   // don't let the browser try to pan/zoom the page
         setZoom(pinchStartZoom * (touchDist(e.touches) / pinchStartDist));
-        showSlider();
+        showPill(true);
       }
     }, { passive: false });
 
-    document.addEventListener("touchend", (e) => {
-      if (e.touches.length < 2) pinchStartDist = 0;
-    }, { passive: true });
+    function endPinch(e) {
+      if (e.touches.length >= 2) return;
+      if (pinchStartDist > 0) showPill(false);
+      pinchStartDist = 0;
+      // A finger still down? Re-baseline so the next pinch doesn't jump.
+      if (e.touches.length === 1) pinchStartZoom = zoom;
+    }
+    document.addEventListener("touchend", endPinch, { passive: true });
+    document.addEventListener("touchcancel", endPinch, { passive: true });
 
-    /* Desktop/trackpad: wheel + ctrl (pinch gesture) or plain wheel over video */
-    video.addEventListener("wheel", (e) => {
+    /* Desktop/trackpad: wheel (and trackpad pinch, which arrives as ctrl+wheel). */
+    document.addEventListener("wheel", (e) => {
+      if (busy) return;
       e.preventDefault();
       setZoom(zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08));
-      showSlider();
+      showPill(false);
     }, { passive: false });
 
     function fmt(ms) {
@@ -561,52 +591,135 @@
       overlay.classList.add("show");
     }
 
-    async function startCamera() {
-      overlay.classList.remove("show");
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      track = null; imageCapture = null;
+    /* ---------------------------------------------------------------- *
+     *  Camera acquisition.
+     *
+     *  `facingMode` is a mobile-only mechanism. Firefox desktop derives it
+     *  from string-matching the OS camera label, so an ordinary webcam
+     *  reports nothing and a facingMode flip silently does nothing. And on
+     *  Firefox Android a non-exact constraint can hand back the camera that
+     *  already holds permission — i.e. the one you're trying to flip away
+     *  from. So we ask by exact deviceId whenever we know one, and keep
+     *  facingMode only as the mobile fast path.
+     *
+     *  Rungs, in order, stopping at the first that yields a stream:
+     *    1. deviceId exact  — the only form that reliably defeats Firefox's
+     *                         permission grace period
+     *    2. facingMode exact — reliable on iOS/Android; its failure on
+     *                          desktop is the signal to cycle deviceIds
+     *    3. facingMode ideal — desktop browsers ignore it rather than throw
+     *    4. bare video:true  — a guest with a fixed roll must always get
+     *                          *a* camera rather than an error overlay
+     * ---------------------------------------------------------------- */
+    const QUALITY = { width: { ideal: 4096 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } };
+
+    let videoInputs = [];      // cached; only meaningful after a successful gUM
+    let deviceIdx = -1;        // position in videoInputs when cycling by id
+    let useDeviceCycle = false; // true once we know facingMode is meaningless
+
+    async function tryGum(videoConstraints) {
       try {
-        // Ask for the highest resolution the device will give us; the browser
-        // clamps to the sensor's real max. Continuous autofocus keeps guests'
-        // shots sharp without a tap-to-focus step.
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facing },
-            width: { ideal: 4096 },
-            height: { ideal: 2160 },
-            frameRate: { ideal: 30 },
-          },
+        return await navigator.mediaDevices.getUserMedia({
+          video: Object.assign({}, QUALITY, videoConstraints),
           audio: false,
         });
-        video.srcObject = stream;
-        track = stream.getVideoTracks()[0];
-
-        // Best-effort focus/exposure hints (ignored where unsupported).
-        try {
-          const caps = track.getCapabilities ? track.getCapabilities() : {};
-          const adv = [];
-          if (caps.focusMode && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
-          if (caps.exposureMode && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
-          if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes("continuous")) adv.push({ whiteBalanceMode: "continuous" });
-          if (adv.length) await track.applyConstraints({ advanced: adv });
-        } catch (e) { /* focus hints are optional */ }
-
-        // ImageCapture gives us a full-resolution still (not the downscaled
-        // preview frame). Feature-detected; we fall back to the canvas path.
-        if (window.ImageCapture && track) {
-          try { imageCapture = new ImageCapture(track); } catch (e) { imageCapture = null; }
-        }
-
-        // A new track means new zoom limits (front cameras usually have none).
-        readZoomCaps();
-        resetZoom();
-        zoomBtn.disabled = zoomMax <= 1;
-
-        // iOS sometimes leaves the element paused despite autoplay.
-        try { await video.play(); } catch (e) { /* preview will start on its own */ }
-      } catch (err) {
-        showOverlay(T.camErr, true, "camera");
+      } catch (e) {
+        return null;
       }
+    }
+
+    /* Device labels/ids are hidden until a getUserMedia has succeeded, so this
+       can only ever run *after* we hold a stream — never before. */
+    async function refreshDevices() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        videoInputs = all.filter(d => d.kind === "videoinput" && d.deviceId);
+      } catch (e) { /* keep whatever we had */ }
+      // Only offer the flip when there's somewhere to flip *to*.
+      switchBtn.hidden = videoInputs.length < 2 && !supportsFacing();
+    }
+
+    function supportsFacing() {
+      const sc = navigator.mediaDevices.getSupportedConstraints
+        ? navigator.mediaDevices.getSupportedConstraints() : {};
+      if (!sc.facingMode) return false;
+      // Supported *and* actually populated: desktop reports undefined here.
+      const s = track && track.getSettings ? track.getSettings() : {};
+      return !!s.facingMode;
+    }
+
+    async function startCamera(targetDeviceId) {
+      overlay.classList.remove("show");
+      // Firefox Android needs the old camera fully released before the new one
+      // is requested, or the second acquisition fails.
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      track = null; imageCapture = null;
+
+      stream = (targetDeviceId && await tryGum({ deviceId: { exact: targetDeviceId } }))
+            || (!useDeviceCycle && await tryGum({ facingMode: { exact: facing } }))
+            || (!useDeviceCycle && await tryGum({ facingMode: { ideal: facing } }))
+            || await tryGum({});
+
+      if (!stream) { showOverlay(T.camErr, true, "camera"); return; }
+
+      video.srcObject = stream;
+      track = stream.getVideoTracks()[0];
+
+      // Did we actually get the facing we asked for? If the browser can't
+      // report facing at all, flipping has to go through deviceIds instead.
+      if (!supportsFacing()) useDeviceCycle = true;
+
+      // Best-effort focus/exposure hints (ignored where unsupported).
+      try {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        const adv = [];
+        if (caps.focusMode && caps.focusMode.includes("continuous")) adv.push({ focusMode: "continuous" });
+        if (caps.exposureMode && caps.exposureMode.includes("continuous")) adv.push({ exposureMode: "continuous" });
+        if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes("continuous")) adv.push({ whiteBalanceMode: "continuous" });
+        if (adv.length) await track.applyConstraints({ advanced: adv });
+      } catch (e) { /* focus hints are optional */ }
+
+      // ImageCapture gives us a full-resolution still (not the downscaled
+      // preview frame). Feature-detected; we fall back to the canvas path.
+      if (window.ImageCapture && track) {
+        try { imageCapture = new ImageCapture(track); } catch (e) { imageCapture = null; }
+      }
+
+      // A new track means new zoom limits (front cameras usually have none).
+      readZoomCaps();
+      resetZoom();
+      applyMirror();
+
+      await refreshDevices();
+      // Keep the cycle index pointing at whatever we're actually showing.
+      const nowId = track.getSettings ? track.getSettings().deviceId : null;
+      if (nowId) {
+        const i = videoInputs.findIndex(d => d.deviceId === nowId);
+        if (i >= 0) deviceIdx = i;
+      }
+
+      // iOS sometimes leaves the element paused despite autoplay.
+      try { await video.play(); } catch (e) { /* preview will start on its own */ }
+    }
+
+    /* Flip. On a phone that reports facing, toggle it. Everywhere else —
+       Firefox desktop especially — advance through the camera list by id. */
+    async function flipCamera() {
+      if (busy) return;
+      if (useDeviceCycle && videoInputs.length > 1) {
+        deviceIdx = (deviceIdx + 1) % videoInputs.length;
+        await startCamera(videoInputs[deviceIdx].deviceId);
+      } else {
+        facing = facing === "environment" ? "user" : "environment";
+        await startCamera();
+      }
+    }
+
+    // Cameras appearing/disappearing (docking, external webcam) changes whether
+    // the flip button has anywhere to go.
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener("devicechange", () => { refreshDevices(); });
     }
 
     // You care about quality over speed, so capture large: cap the long edge
@@ -650,7 +763,7 @@
     function captureCrop() { return zoomCaps ? 1 : zoom; }
 
     async function grabBlob() {
-      const mirror = facing === "user";
+      const mirror = isFrontFacing();
       const crop = captureCrop();
       // Preferred: full-resolution still from the sensor — but time-boxed,
       // because takePhoto() stalls on some devices. Falls back to the frame.
@@ -685,25 +798,113 @@
       }
     }
 
+    /* ---------------------------------------------------------------- *
+     *  Time remaining.
+     *
+     *  Venue wifi is bursty, so instantaneous rate is far too jumpy to show
+     *  a guest — the number would flicker between "2s" and "40s". We hold an
+     *  exponential moving average of bytes/sec and only *lower* the displayed
+     *  estimate unless the truth is much worse, so the countdown reads as a
+     *  countdown rather than a random number generator.
+     *
+     *  Seconds is the right unit: a ~2-4 MB JPEG on hotel wifi is a handful
+     *  of seconds. Minutes only appear when it's genuinely that bad.
+     * ---------------------------------------------------------------- */
+    let etaRate = 0;        // smoothed bytes/sec
+    let etaLastT = 0;
+    let etaLastLoaded = 0;
+    let etaShown = null;    // last seconds value we displayed
+
+    function etaReset() {
+      etaRate = 0; etaLastT = 0; etaLastLoaded = 0; etaShown = null;
+      etaEl.textContent = T.etaCalc;
+    }
+
+    function etaUpdate(loaded, total) {
+      const now = performance.now();
+      if (!etaLastT) { etaLastT = now; etaLastLoaded = loaded; return; }
+
+      const dt = (now - etaLastT) / 1000;
+      if (dt < 0.25) return;                  // too soon to say anything useful
+      const dBytes = loaded - etaLastLoaded;
+
+      // Stalled: bytes stopped moving. Say so rather than let the last estimate
+      // stand — a frozen "2s left" on a dead connection is worse than silence.
+      if (dBytes <= 0) {
+        if (dt >= 2) { etaEl.textContent = T.etaCalc; etaShown = null; }
+        return;                               // keep the baseline; don't skew the average
+      }
+
+      etaLastT = now; etaLastLoaded = loaded;
+      const sample = dBytes / dt;
+      // First sample seeds the average; later ones ease it 30% toward the truth.
+      etaRate = etaRate ? etaRate * 0.7 + sample * 0.3 : sample;
+      if (etaRate <= 0) return;
+
+      const secs = Math.ceil((total - loaded) / etaRate);
+      // Hold the number steady against small upward corrections so it reads as
+      // a countdown, but let a genuinely worse estimate (>=3s) through.
+      if (etaShown != null && secs > etaShown && secs - etaShown < 3) return;
+      etaShown = secs;
+      etaEl.textContent = etaText(secs, loaded / total);
+    }
+
+    /* `frac` guards the "finishing" wording: on a fast link the arithmetic says
+       ~1s while half the photo is still in flight, and claiming we're finishing
+       at 50% reads as a stuck progress bar. */
+    function etaText(secs, frac) {
+      if (secs <= 1) return frac >= 0.9 ? T.etaFin : T.etaSecs.replace("{n}", faDigit("1"));
+      if (secs < 60) return T.etaSecs.replace("{n}", faDigit(String(secs)));
+      const mins = Math.round(secs / 60);
+      return mins <= 1 ? T.etaMin : T.etaMins.replace("{n}", faDigit(String(mins)));
+    }
+
     // XHR upload so we can report real bytes-sent progress (fetch cannot).
+    // The live xhr is tracked so Cancel can abort it.
+    let activeXhr = null;
+
     function uploadBlob(blob) {
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        activeXhr = xhr;
         xhr.open("POST", CAPTURE_URL, true);
         xhr.setRequestHeader("X-CSRFToken", csrf);
         xhr.timeout = UPLOAD_MS;
         xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress((e.loaded / e.total) * 100);
+          if (e.lengthComputable) {
+            setProgress((e.loaded / e.total) * 100);
+            etaUpdate(e.loaded, e.total);
+          }
         };
-        xhr.upload.onload = () => setProgress(100);  // bytes done; server working
-        xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
-        xhr.onerror = () => reject(new Error("network"));
-        xhr.ontimeout = () => reject(new Error("timeout"));
+        xhr.upload.onload = () => {
+          setProgress(100);              // bytes done; server still working
+          etaEl.textContent = T.etaFin;
+        };
+        xhr.onload = () => { activeXhr = null; resolve({ status: xhr.status, text: xhr.responseText }); };
+        xhr.onerror = () => { activeXhr = null; reject(new Error("network")); };
+        xhr.ontimeout = () => { activeXhr = null; reject(new Error("timeout")); };
+        // abort() fires onabort, not onerror — surface it as its own reason so
+        // submitBlob knows not to auto-retry a deliberate cancel.
+        xhr.onabort = () => { activeXhr = null; reject(new Error("aborted")); };
         const fd = new FormData();
         fd.append("image", blob, "snap.jpg");
         xhr.send(fd);
       });
     }
+
+    /* Cancel. The roll is only decremented when the server commits the photo,
+       so aborting mid-flight costs the guest nothing — the exposure is still
+       theirs to use. Flagged so the retry path doesn't fight the abort. */
+    let cancelled = false;
+
+    function cancelUpload() {
+      if (!activeXhr) return;
+      cancelled = true;
+      cancelBtn.disabled = true;
+      activeXhr.abort();
+    }
+
+    cancelBtn.addEventListener("click", cancelUpload);
 
     function setBusy(on) {
       busy = on;
@@ -715,13 +916,17 @@
        shutter and the gallery picker so both consume the same roll. */
     async function submitBlob(blob) {
       setProgress(0);             // start of upload
+      etaReset();
 
-      // One automatic retry on network blip or timeout.
+      // One automatic retry on network blip or timeout — but never after a
+      // deliberate cancel, which would resurrect the upload the guest killed.
       let res;
       try {
         res = await uploadBlob(blob);
       } catch (e) {
+        if (cancelled || e.message === "aborted") throw e;
         setProgress(null);        // indeterminate while retrying
+        etaReset();
         res = await uploadBlob(blob);
       }
 
@@ -757,11 +962,24 @@
       try {
         await submitBlob(await grabBlob());
       } catch (e) {
-        showOverlay(T.upErr, true, "upload");
+        // A cancel is the guest's own decision — tell them plainly that the
+        // photo wasn't saved, rather than implying something broke.
+        showOverlay(wasCancelled(e) ? T.cancelled : T.upErr, true, "upload");
       } finally {
-        sending.classList.remove("show");
-        setBusy(false);
+        endSending();
       }
+    }
+
+    function wasCancelled(e) { return cancelled || (e && e.message === "aborted"); }
+
+    /* Tear down the sending overlay and re-arm the shutter. Always paired with
+       a show, including on the cancel path, or the guest is stuck behind it. */
+    function endSending() {
+      sending.classList.remove("show");
+      cancelled = false;
+      cancelBtn.disabled = false;
+      activeXhr = null;
+      setBusy(false);
     }
 
     /* Decode a picked file, honouring EXIF orientation.
@@ -816,11 +1034,10 @@
         const blob = await encode(decoded.src, decoded.w, decoded.h, false, 1);
         await submitBlob(blob);
       } catch (e) {
-        showOverlay(T.upErr, true, "upload");
+        showOverlay(wasCancelled(e) ? T.cancelled : T.upErr, true, "upload");
       } finally {
         if (decoded) decoded.release();
-        sending.classList.remove("show");
-        setBusy(false);
+        endSending();
       }
     }
 
@@ -831,11 +1048,7 @@
       fileInput.value = "";   // let the same file be picked again later
       if (file) usePickedFile(file);
     });
-    document.getElementById("switch").addEventListener("click", () => {
-      if (busy) return;               // don't swap cameras mid-upload
-      facing = facing === "environment" ? "user" : "environment";
-      startCamera();                  // resets zoom and re-applies the mirror
-    });
+    switchBtn.addEventListener("click", flipCamera);
     document.getElementById("overlay-retry").addEventListener("click", () => {
       if (overlayKind === "upload") { overlay.classList.remove("show"); return; }
       startCamera();
@@ -847,6 +1060,17 @@
       if (document.visibilityState !== "visible" || busy) return;
       if (!stream || !track || track.readyState === "ended") { startCamera(); return; }
       video.play().catch(() => { /* nothing more we can do */ });
+    });
+
+    /* The viewfinder must never sit paused. iOS pauses the element on its own
+       for things we don't control (PiP attempts, audio-session interruptions,
+       long-press menus), and a frozen preview looks identical to a crashed
+       app. Whatever caused it, resume — unless the track is actually dead, in
+       which case rebuild the whole stream instead. */
+    video.addEventListener("pause", () => {
+      if (document.visibilityState !== "visible") return;   // legitimately backgrounded
+      if (!track || track.readyState === "ended") { startCamera(); return; }
+      video.play().catch(() => {});
     });
 
     renderCounter();

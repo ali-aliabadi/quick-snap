@@ -1,9 +1,13 @@
 """Tests for Quick Snap: models, guest flow, window gating, phones, admin, i18n."""
 
 import io
+import json
+import re
 import shutil
 import tempfile
 from datetime import timedelta
+from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -283,7 +287,7 @@ class CameraViewTests(TestCase):
         self.assertContains(self._joined_camera(), f'data-join-url="{self.join}"')
 
     def test_camera_has_zoom_control(self):
-        self.assertContains(self._joined_camera(), 'id="zoom-btn"')
+        self.assertContains(self._joined_camera(), 'id="zoom-pill"')
 
 
 @override_settings(APP_LANG="en")
@@ -571,6 +575,201 @@ class I18nTests(TestCase):
     def test_set_language_get_not_allowed(self):
         r = self.client.get(reverse("set_language"))
         self.assertEqual(r.status_code, 405)
+
+
+# --------------------------------------------------------------------------- #
+# Metrics
+# --------------------------------------------------------------------------- #
+@override_settings(METRICS_TOKEN="test-token")
+class MetricsEndpointTests(TestCase):
+    """The endpoint exposes guest counts, event slugs and storage figures, and
+    every scrape walks the media tree — so the gate is load-bearing, not
+    cosmetic."""
+
+    url = "/metrics"
+
+    def test_requires_a_token(self):
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_rejects_wrong_token(self):
+        self.assertEqual(self.client.get(self.url + "?token=nope").status_code, 404)
+
+    def test_accepts_query_token(self):
+        self.assertEqual(
+            self.client.get(self.url + "?token=test-token").status_code, 200
+        )
+
+    def test_accepts_bearer_token(self):
+        r = self.client.get(self.url, HTTP_AUTHORIZATION="Bearer test-token")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/plain", r["Content-Type"])
+
+    @override_settings(METRICS_TOKEN="", DEBUG=False)
+    def test_fails_closed_when_unconfigured_in_production(self):
+        """Forgetting to set the token must not silently publish the data."""
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    @override_settings(METRICS_TOKEN="", DEBUG=True)
+    def test_open_in_debug(self):
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def _scrape(self):
+        return self.client.get(self.url + "?token=test-token").content.decode()
+
+    @staticmethod
+    def _value(name, labels):
+        """Current value of one counter series, or 0.0 if not yet created.
+
+        Counters are process-global and keep climbing across tests in the same
+        run, so assertions here compare *deltas* rather than absolute values —
+        an absolute assertion would pass or fail depending on test order.
+        """
+        from prometheus_client import REGISTRY
+
+        return REGISTRY.get_sample_value(name, labels) or 0.0
+
+    def test_counts_captures_and_errors(self):
+        ev = make_event(password="pw", roll_size=2)
+        join = reverse("snap:join", args=[ev.slug])
+        cap = reverse("snap:capture", args=[ev.slug])
+
+        before_ok = self._value("quicksnap_photos_captured_total", {"event": ev.slug})
+        before_err = self._value(
+            "quicksnap_capture_errors_total", {"reason": "not_joined"}
+        )
+        before_join = self._value("quicksnap_joins_total", {"result": "created"})
+
+        self.client.post(
+            join, {"name": "Ann", "phone": "09123456789", "password": "pw"}
+        )
+        self.client.post(cap, {"image": upload()})
+        Client().post(cap, {"image": upload()})  # no session -> not_joined
+
+        self.assertEqual(
+            self._value("quicksnap_photos_captured_total", {"event": ev.slug})
+            - before_ok,
+            1.0,
+        )
+        self.assertEqual(
+            self._value("quicksnap_capture_errors_total", {"reason": "not_joined"})
+            - before_err,
+            1.0,
+        )
+        self.assertEqual(
+            self._value("quicksnap_joins_total", {"result": "created"}) - before_join,
+            1.0,
+        )
+        # And they reach the scrape output, not just the in-process registry.
+        self.assertIn("quicksnap_photos_captured_total", self._scrape())
+
+    def test_exposes_live_state_gauges(self):
+        """Gauges are read from the DB at scrape time, so they can't drift."""
+        ev = make_event(password="pw", roll_size=4)
+        self.client.post(
+            reverse("snap:join", args=[ev.slug]),
+            {"name": "Ann", "phone": "09123456789", "password": "pw"},
+        )
+        Photo.objects.create(guest=ev.guests.get(), image=upload())
+
+        body = self._scrape()
+        self.assertIn("quicksnap_photos 1.0", body)
+        self.assertIn("quicksnap_guests 1.0", body)
+        self.assertIn('quicksnap_events{state="open"} 1.0', body)
+        # 1 guest x roll_size 4 = 4 capacity, 1 taken
+        self.assertIn(
+            f'quicksnap_event_roll_fill_ratio{{event="{ev.slug}"}} 0.25', body
+        )
+
+    def test_request_metrics_use_view_names_not_paths(self):
+        """Raw paths would let a 404 scanner mint unbounded label values."""
+        self.client.get("/definitely-not-a-real-path-12345")
+        body = self._scrape()
+        self.assertIn('view="<unmatched>"', body)
+        self.assertNotIn("definitely-not-a-real-path", body)
+
+    def test_scrape_survives_a_broken_collector(self):
+        """A monitoring endpoint that 500s during an incident is worse than a
+        missing panel, so StateCollector swallows its own failures."""
+        with mock.patch(
+            "snap.models.Photo.objects.count", side_effect=RuntimeError("boom")
+        ):
+            r = self.client.get(self.url + "?token=test-token")
+        self.assertEqual(r.status_code, 200)
+        # The event counters still made it out even though the gauges bailed.
+        self.assertIn("quicksnap_http_requests_total", r.content.decode())
+
+
+class DashboardTests(TestCase):
+    """The Grafana dashboard is committed JSON, so it can be checked like code.
+    A typo'd metric name renders an empty panel forever and nobody notices."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        path = (
+            Path(settings.BASE_DIR)
+            / "deploy/monitoring/grafana/dashboards/quicksnap.json"
+        )
+        cls.dash = json.loads(path.read_text())
+
+    def test_panel_ids_are_unique(self):
+        ids = [p["id"] for p in self.dash["panels"]]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_panels_stay_inside_the_grid(self):
+        for p in self.dash["panels"]:
+            g = p["gridPos"]
+            self.assertLessEqual(
+                g["x"] + g["w"], 24, f"{p.get('title')} overflows the 24-col grid"
+            )
+
+    def test_panels_do_not_overlap(self):
+        seen = {}
+        for p in self.dash["panels"]:
+            g = p["gridPos"]
+            for y in range(g["y"], g["y"] + g["h"]):
+                for x in range(g["x"], g["x"] + g["w"]):
+                    prev = seen.get((x, y))
+                    self.assertIsNone(
+                        prev,
+                        f"{p.get('title')!r} overlaps {prev!r} at ({x},{y})",
+                    )
+                    seen[(x, y)] = p.get("title")
+
+    def test_every_quicksnap_metric_queried_is_actually_emitted(self):
+        from prometheus_client import generate_latest
+
+        from .metrics import registry
+
+        emitted = set()
+        for line in generate_latest(registry()).decode().splitlines():
+            if line.startswith("# TYPE"):
+                emitted.add(line.split()[2])
+        # The DB-size gauge is skipped on an in-memory test database by design.
+        emitted.add("quicksnap_database_bytes")
+
+        def family(name):
+            for suffix in ("_bucket", "_total", "_sum", "_count"):
+                if name.endswith(suffix):
+                    return name[: -len(suffix)]
+            return name
+
+        queried = set()
+        for panel in self.dash["panels"]:
+            for t in panel.get("targets", []):
+                queried |= set(re.findall(r"\b(quicksnap_[a-z_]+)", t["expr"]))
+
+        missing = sorted(
+            q for q in queried if family(q) not in emitted and q not in emitted
+        )
+        self.assertEqual(missing, [], f"dashboard queries unemitted metrics: {missing}")
+
+    def test_no_dual_axis_panels(self):
+        """Two y-scales on one chart is the single worst chart mistake."""
+        for p in self.dash["panels"]:
+            for ov in p.get("fieldConfig", {}).get("overrides", []):
+                props = [x["id"] for x in ov.get("properties", [])]
+                self.assertNotIn("custom.axisPlacement", props)
 
 
 class PublicPagesTests(TestCase):

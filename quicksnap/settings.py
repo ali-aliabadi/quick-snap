@@ -40,6 +40,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Outermost-but-last so it times the full stack below it.
+    "snap.middleware.MetricsMiddleware",
 ]
 
 ROOT_URLCONF = "quicksnap.urls"
@@ -135,6 +137,12 @@ DEFAULT_FROM_EMAIL = env(
 
 # Uploaded photo cap (defensive; camera JPEGs are small).
 DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15 MB
+
+# --- Metrics ---
+# Shared secret for GET /metrics. Empty means the endpoint 404s in production
+# (fail closed) and is open in DEBUG. Generate one with:
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
+METRICS_TOKEN = env("METRICS_TOKEN", default="")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

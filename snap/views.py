@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponseRedirect, JsonResponse
@@ -8,6 +10,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .context_processors import LANG_COOKIE, SUPPORTED_LANGS
 from .i18n import get_strings
+from .metrics import capture_errors, joins, photos_captured, upload_bytes
 from .models import Event, Guest, Photo
 from .phones import normalize_phone
 
@@ -50,6 +53,48 @@ def _join_context(request, event, **extra):
 def landing(request):
     """Public marketing home at the site root."""
     return render(request, "snap/landing.html")
+
+
+@require_http_methods(["GET"])
+def metrics(request):
+    """Prometheus scrape endpoint.
+
+    **Not public.** Guest counts, event slugs and storage figures are operational
+    data, and an unauthenticated metrics endpoint is also a free DoS amplifier
+    (every scrape walks the media tree). Access needs the `METRICS_TOKEN`
+    secret as a bearer token or `?token=`.
+
+    Fails *closed*: with no token configured the endpoint 404s in production, so
+    forgetting to set it cannot silently expose the data. In DEBUG it stays open
+    for convenience. nginx also blocks the path publicly (defence in depth, see
+    deploy/nginx-quicksnap.conf) — this check is what protects it if the app is
+    ever reached directly.
+    """
+    from django.http import HttpResponse, HttpResponseNotFound
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    from .metrics import registry
+
+    expected = getattr(settings, "METRICS_TOKEN", "")
+    if not expected:
+        if not settings.DEBUG:
+            return HttpResponseNotFound()
+    else:
+        header = request.META.get("HTTP_AUTHORIZATION", "")
+        supplied = (
+            header[7:]
+            if header.lower().startswith("bearer ")
+            else request.GET.get("token", "")
+        )
+        # Constant-time compare: a plain `!=` leaks the token a character at a
+        # time to anyone who can measure response latency.
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            return HttpResponseNotFound()
+
+    return HttpResponse(
+        generate_latest(registry()),
+        content_type=CONTENT_TYPE_LATEST,
+    )
 
 
 @require_POST
@@ -121,6 +166,7 @@ def join(request, slug):
             errors.append(t["err_wrong_password"])
 
         if errors:
+            joins.labels(result="rejected").inc()
             return render(
                 request,
                 "snap/join.html",
@@ -134,6 +180,7 @@ def join(request, slug):
         guest, _created = Guest.objects.get_or_create(
             event=event, phone=phone, defaults={"name": name}
         )
+        joins.labels(result="created" if _created else "resumed").inc()
         # If returning (not created), the name might have changed — update it.
         if not _created and guest.name != name:
             guest.name = name
@@ -167,6 +214,7 @@ def capture(request, slug):
     event = get_object_or_404(Event, slug=slug)
     guest = _session_guest(request, event)
     if guest is None:
+        capture_errors.labels(reason="not_joined").inc()
         return JsonResponse({"error": "not_joined"}, status=403)
 
     # Time window + active gate (never trust the client).
@@ -176,10 +224,12 @@ def capture(request, slug):
             if event.has_ended
             else ("not_started" if not event.has_started else "closed")
         )
+        capture_errors.labels(reason=reason).inc()
         return JsonResponse({"error": reason}, status=403)
 
     image = request.FILES.get("image")
     if not image:
+        capture_errors.labels(reason="no_image").inc()
         return JsonResponse({"error": "no_image"}, status=400)
 
     # Server-side roll cap — never trust the client counter. Locking the guest
@@ -189,10 +239,13 @@ def capture(request, slug):
     with transaction.atomic():
         locked = Guest.objects.select_for_update().get(pk=guest.pk)
         if locked.roll_full:
+            capture_errors.labels(reason="roll_full").inc()
             return JsonResponse({"remaining": 0, "done": True}, status=409)
         Photo.objects.create(guest=locked, image=image)
         remaining = locked.remaining
 
+    photos_captured.labels(event=event.slug).inc()
+    upload_bytes.observe(image.size)
     return JsonResponse({"remaining": remaining, "done": remaining == 0})
 
 
