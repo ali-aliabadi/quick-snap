@@ -74,7 +74,11 @@ services:
       - "127.0.0.1:9100:9100"
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    # v0.52.1, not v0.49.x: the older image speaks Docker API 1.41 and this
+    # host's daemon requires 1.44+, so its Docker factory failed to register and
+    # every series came back as a raw cgroup id (`id="/system.slice/docker-<hash>"`)
+    # with an empty `name` label — leaving the per-container panels blank.
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
     restart: unless-stopped
     # Per-container CPU/memory — this is how you tell whether it's Quick Snap
     # or a neighbour (eid_web, v2ray) eating the box.
@@ -84,6 +88,11 @@ services:
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
+      # The Docker socket is what turns raw cgroup ids
+      # (/system.slice/docker-<hash>.scope) into readable container names.
+      # Without it every series is labelled id="/…" with an empty `name`, and
+      # the per-container panels render permanently blank.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
