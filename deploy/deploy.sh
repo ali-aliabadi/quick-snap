@@ -43,12 +43,17 @@ if ! grep -q '^METRICS_TOKEN=.\+' .env 2>/dev/null; then
     printf 'METRICS_TOKEN=%s\n' "$token" >> .env.tmp
     mv .env.tmp .env
 fi
-# Materialise the token file Prometheus mounts (0600 — it is a credential).
-# Select the *populated* line, in case an empty placeholder is still present.
-umask 077
+# Materialise the token file Prometheus mounts. Select the *populated* line, in
+# case an empty placeholder is still present.
 grep '^METRICS_TOKEN=.\+' .env | tail -1 | cut -d= -f2- \
     | tr -d '\r\n' > deploy/monitoring/.metrics_token
-chmod 600 deploy/monitoring/.metrics_token
+# The prometheus image runs as nobody (65534), so a root-only 0600 file leaves
+# it unable to read its own credential and every scrape fails with
+# "unable to read authorization credentials". Own it by that uid and keep it
+# unreadable to everyone else.
+chown 65534:65534 deploy/monitoring/.metrics_token 2>/dev/null \
+    || sudo chown 65534:65534 deploy/monitoring/.metrics_token
+chmod 400 deploy/monitoring/.metrics_token
 # A zero-length token would make every scrape 404 while looking configured.
 if [ ! -s deploy/monitoring/.metrics_token ]; then
     echo "!! Failed to write a non-empty METRICS_TOKEN file." >&2

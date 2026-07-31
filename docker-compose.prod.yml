@@ -45,7 +45,10 @@ services:
       - --storage.tsdb.path=/prometheus
       # 15d of a handful of targets at 15s is well under a GB.
       - --storage.tsdb.retention.time=15d
-      - --web.external-url=/prometheus/
+      # Deliberately NO --web.external-url: it relocates the whole HTTP API
+      # under that prefix, so Grafana's datasource (http://prometheus:9090)
+      # 404s and every panel renders empty. Prometheus' own UI is not published
+      # anyway — reach it with `ssh -L 9090:localhost:9090 german-vps`.
     env_file: .env
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -55,10 +58,6 @@ services:
       - prom_data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
-    extra_hosts:
-      # Lets Prometheus reach the app on the host's loopback binding, the same
-      # path nginx uses. Linux needs this mapped explicitly.
-      - "host.docker.internal:host-gateway"
 
   node-exporter:
     image: prom/node-exporter:v1.8.2

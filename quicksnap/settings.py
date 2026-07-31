@@ -18,6 +18,13 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+
+# Prometheus scrapes the app over the compose network as http://web:8000/metrics,
+# so Django must accept "web" as a Host or it answers 400 and every dashboard
+# panel is empty. This is a container-internal service name — it is not routable
+# from outside the compose network, so accepting it costs nothing publicly.
+if "web" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = list(ALLOWED_HOSTS) + ["web"]
 # CSRF trusted origins (https://your-domain) for prod behind Caddy.
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 

@@ -16,16 +16,22 @@ global:
 
 scrape_configs:
   - job_name: quicksnap
-    # The app is bound to the host's loopback (127.0.0.1:8010), reachable from
-    # this container via the host-gateway alias set in docker-compose.
+    # Scrape the app directly over the compose network. Do NOT use
+    # host.docker.internal:8010 — that alias does not resolve on this Linux
+    # host, and bouncing out to the host loopback and back in is pointless when
+    # both containers already share a network.
+    #
+    # Django validates the Host header against ALLOWED_HOSTS and would answer
+    # 400 for "web"; settings.py appends the internal service name so this
+    # works without a manual step on the VPS.
     static_configs:
-      - targets: ["host.docker.internal:8010"]
+      - targets: ["web:8000"]
     # /metrics is token-gated (it exposes guest counts and event slugs), so the
-    # scrape authenticates. METRICS_TOKEN comes from .env via env_file.
+    # scrape authenticates. deploy.sh writes this file from METRICS_TOKEN and
+    # chowns it to uid 65534, the user the prometheus image runs as.
     authorization:
       type: Bearer
       credentials_file: /etc/prometheus/metrics_token
-    # A scrape walks the media tree, so give it room on a slow disk.
     scrape_timeout: 10s
 
   - job_name: node
